@@ -1,0 +1,13 @@
+{
+  "id": "ssb-usb",
+  "name": "SSB USB — upper sideband only",
+  "mode": "ssb",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "sideband": "usb",
+    "amplitude": 0.5,
+    "carrierPilot": false
+  },
+  "rfAnalogy": "USB keeps frequencies above the carrier. Compare with AM at 100% — same voice tone, but only one sideband and no carrier."
+}

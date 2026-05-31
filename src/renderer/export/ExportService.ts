@@ -4,7 +4,8 @@ import type {
   CwParams,
   FmParams,
   MixParams,
-  SignalState
+  SignalState,
+  SsbParams
 } from '../audio/types'
 import { clampAmp, clampFreq, clampModIndex } from '../audio/types'
 import { EXPORT_SAMPLE_RATE, type ExportScreenshotMeta } from './types'
@@ -30,6 +31,9 @@ function buildOfflineGraph(ctx: OfflineAudioContext, state: SignalState): void {
       break
     case 'cw':
       buildCwOffline(ctx, state.cw, masterGain)
+      break
+    case 'ssb':
+      buildSsbOffline(ctx, state.ssb, masterGain)
       break
   }
 }
@@ -175,6 +179,34 @@ function buildCwOffline(ctx: OfflineAudioContext, params: CwParams, masterGain: 
   offset.start(0)
 }
 
+function buildSsbOffline(ctx: OfflineAudioContext, params: SsbParams, masterGain: GainNode): void {
+  const carrierHz = clampFreq(params.carrierHz)
+  const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
+  const amp = clampAmp(params.amplitude)
+  const sideFreq =
+    params.sideband === 'usb' ? carrierHz + modulatorHz : carrierHz - modulatorHz
+
+  const sideOsc = ctx.createOscillator()
+  sideOsc.type = 'sine'
+  sideOsc.frequency.value = clampFreq(sideFreq)
+  const sideGain = ctx.createGain()
+  sideGain.gain.value = amp
+  sideOsc.connect(sideGain)
+  sideGain.connect(masterGain)
+  sideOsc.start(0)
+
+  if (params.carrierPilot) {
+    const pilot = ctx.createOscillator()
+    pilot.type = 'sine'
+    pilot.frequency.value = carrierHz
+    const pilotGain = ctx.createGain()
+    pilotGain.gain.value = amp * 0.1
+    pilot.connect(pilotGain)
+    pilotGain.connect(masterGain)
+    pilot.start(0)
+  }
+}
+
 function compositeScreenshot(
   scopeCanvas: HTMLCanvasElement,
   spectrumCanvas: HTMLCanvasElement,
@@ -202,7 +234,10 @@ function compositeScreenshot(
 
   ctx.fillStyle = '#9090a8'
   ctx.font = '15px system-ui, sans-serif'
-  ctx.fillText(meta.paramsText, padding, padding + 50)
+  const viewLine = meta.spectrumView
+    ? `${meta.paramsText} · view ${Math.round(meta.spectrumView.minHz)}–${Math.round(meta.spectrumView.maxHz)} Hz`
+    : meta.paramsText
+  ctx.fillText(viewLine, padding, padding + 50)
 
   const vizTop = headerHeight + padding
   const vizHeight = height - vizTop - padding

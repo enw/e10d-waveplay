@@ -1,0 +1,13 @@
+{
+  "id": "ssb-pilot",
+  "name": "SSB with carrier pilot",
+  "mode": "ssb",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "sideband": "usb",
+    "amplitude": 0.5,
+    "carrierPilot": true
+  },
+  "rfAnalogy": "A weak carrier pilot (−20 dB) helps tune SSB receivers. Toggle pilot off to hear fully suppressed-carrier SSB."
+}

@@ -21,10 +21,26 @@ describe('types', () => {
       fm: { carrierHz: 440, modulatorHz: 5, deviationHz: 25 },
       mix: { oscAHz: 1000, oscAAmp: 0.5, oscBHz: 1005, oscBAmp: 0.5, mixMode: 'sum' },
       cw: { carrierHz: 800, gateHz: 5, amplitude: 0.5 },
+      ssb: { carrierHz: 1000, modulatorHz: 100, sideband: 'usb', amplitude: 0.5, carrierPilot: false },
       volume: 0.5,
       playing: false
     })
     expect(hints.spectrumLabels?.map((l) => l.label)).toEqual(['LSB', 'carrier', 'USB'])
+  })
+
+  it('returns SSB spectrum labels without pilot', () => {
+    const hints = getVizHints({
+      mode: 'ssb',
+      basic: { waveShape: 'sine', frequencyHz: 1000, amplitude: 0.5 },
+      am: { carrierHz: 1000, modulatorHz: 100, modulationIndex: 1 },
+      fm: { carrierHz: 440, modulatorHz: 5, deviationHz: 25 },
+      mix: { oscAHz: 1000, oscAAmp: 0.5, oscBHz: 1005, oscBAmp: 0.5, mixMode: 'sum' },
+      cw: { carrierHz: 800, gateHz: 5, amplitude: 0.5 },
+      ssb: { carrierHz: 1000, modulatorHz: 100, sideband: 'usb', amplitude: 0.5, carrierPilot: false },
+      volume: 0.5,
+      playing: false
+    })
+    expect(hints.spectrumLabels?.map((l) => l.label)).toEqual(['USB'])
   })
 })
 

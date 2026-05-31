@@ -113,6 +113,53 @@ body {
   height: 100%;
 }
 
+.spectrum-panel {
+  min-height: 280px;
+}
+
+.spectrum-stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.spectrum-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: #0e0e16;
+}
+
+.spectrum-hint {
+  color: var(--muted);
+  font-size: 0.65rem;
+  margin-left: auto;
+}
+
+.spectrum-canvas-host {
+  flex: 1 1 auto;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+  min-width: auto !important;
+}
+
+.checkbox input {
+  accent-color: var(--accent);
+}
+
 .rf-panel {
   background: var(--panel);
   border: 1px solid var(--border);

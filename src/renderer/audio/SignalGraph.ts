@@ -1,4 +1,4 @@
-import type { AmParams, BasicParams, CwParams, FmParams, MixParams, SignalMode, SignalState, WaveShape } from './types'
+import type { AmParams, BasicParams, CwParams, FmParams, MixParams, SignalMode, SignalState, SsbParams, WaveShape } from './types'
 import { clampAmp, clampFreq, clampModIndex } from './types'
 
 type Disposer = () => void
@@ -72,6 +72,8 @@ export class SignalGraph {
         return this.buildMix(state.mix)
       case 'cw':
         return this.buildCw(state.cw)
+      case 'ssb':
+        return this.buildSsb(state.ssb)
     }
   }
 
@@ -264,6 +266,48 @@ export class SignalGraph {
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
+    }
+  }
+
+  private buildSsb(params: SsbParams): Disposer {
+    const carrierHz = clampFreq(params.carrierHz)
+    const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
+    const amp = clampAmp(params.amplitude)
+    const sideFreq =
+      params.sideband === 'usb' ? carrierHz + modulatorHz : carrierHz - modulatorHz
+
+    const sideOsc = this.context.createOscillator()
+    sideOsc.type = 'sine'
+    sideOsc.frequency.value = clampFreq(sideFreq)
+
+    const sideGain = this.context.createGain()
+    sideGain.gain.value = amp
+
+    sideOsc.connect(sideGain)
+    sideGain.connect(this.masterGain)
+    sideOsc.start()
+
+    let pilotOsc: OscillatorNode | null = null
+    let pilotGain: GainNode | null = null
+
+    if (params.carrierPilot) {
+      pilotOsc = this.context.createOscillator()
+      pilotOsc.type = 'sine'
+      pilotOsc.frequency.value = carrierHz
+      pilotGain = this.context.createGain()
+      pilotGain.gain.value = amp * 0.1
+      pilotOsc.connect(pilotGain)
+      pilotGain.connect(this.masterGain)
+      pilotOsc.start()
+    }
+
+    return () => {
+      sideOsc.stop()
+      sideOsc.disconnect()
+      sideGain.disconnect()
+      pilotOsc?.stop()
+      pilotOsc?.disconnect()
+      pilotGain?.disconnect()
     }
   }
 }

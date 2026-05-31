@@ -12,13 +12,15 @@ import Spectrum from '@/components/Spectrum'
 import PresetPicker from '@/components/PresetPicker'
 import type { Preset } from '@/presets'
 import { exportScreenshot, exportWav } from '@/export/ExportService'
+import { defaultSpectrumView, type SpectrumView } from '@/viz/spectrumView'
 
 const MODES: { id: SignalMode; label: string }[] = [
   { id: 'basic', label: 'Basic' },
   { id: 'am', label: 'AM' },
   { id: 'fm', label: 'FM' },
   { id: 'mix', label: 'Mix' },
-  { id: 'cw', label: 'CW' }
+  { id: 'cw', label: 'CW' },
+  { id: 'ssb', label: 'SSB' }
 ]
 
 const SHAPES: WaveShape[] = ['sine', 'square', 'triangle', 'sawtooth']
@@ -30,6 +32,7 @@ export default function App() {
   const [rfAnalogy, setRfAnalogy] = useState('')
   const [presetId, setPresetId] = useState<string>('')
   const [exportDuration, setExportDuration] = useState(3)
+  const [spectrumView, setSpectrumView] = useState<SpectrumView>(defaultSpectrumView)
   const stateRef = useRef(state)
 
   stateRef.current = state
@@ -49,7 +52,7 @@ export default function App() {
   useEffect(() => {
     if (!state.playing) return
     graph.updateParams(state)
-  }, [graph, state.mode, state.basic, state.am, state.fm, state.mix, state.cw, state.playing])
+  }, [graph, state.mode, state.basic, state.am, state.fm, state.mix, state.cw, state.ssb, state.playing])
 
   const togglePlay = useCallback(async () => {
     const current = stateRef.current
@@ -115,6 +118,8 @@ export default function App() {
         return `${state.mix.oscAHz}+${state.mix.oscBHz} Hz (${state.mix.mixMode})`
       case 'cw':
         return `fc=${state.cw.carrierHz} gate=${state.cw.gateHz} Hz`
+      case 'ssb':
+        return `${state.ssb.sideband.toUpperCase()} fc=${state.ssb.carrierHz} fm=${state.ssb.modulatorHz}${state.ssb.carrierPilot ? ' +pilot' : ''}`
     }
   }
 
@@ -128,7 +133,8 @@ export default function App() {
     if (!scope || !spectrum) return
     await exportScreenshot(scope, spectrum, {
       mode: state.mode,
-      paramsText: paramsSummary()
+      paramsText: paramsSummary(),
+      spectrumView
     })
   }
 
@@ -148,13 +154,15 @@ export default function App() {
             envelope={hints.envelope}
           />
         </div>
-        <div className="viz-panel">
+        <div className="viz-panel spectrum-panel">
           <div className="viz-label">Spectrum</div>
           <Spectrum
             analyser={graph.analyser}
             active={state.playing}
             labels={hints.spectrumLabels}
             sampleRate={graph.context.sampleRate}
+            view={spectrumView}
+            onViewChange={setSpectrumView}
           />
         </div>
       </div>
@@ -342,6 +350,58 @@ export default function App() {
               value={state.cw.amplitude}
               onChange={(v) => setState((s) => ({ ...s, cw: { ...s.cw, amplitude: v } }))}
             />
+          </>
+        )}
+
+        {state.mode === 'ssb' && (
+          <>
+            <Slider
+              label="Carrier (Hz)"
+              min={100}
+              max={4000}
+              value={state.ssb.carrierHz}
+              onChange={(v) => setState((s) => ({ ...s, ssb: { ...s.ssb, carrierHz: v } }))}
+            />
+            <Slider
+              label="Modulator (Hz)"
+              min={1}
+              max={500}
+              value={state.ssb.modulatorHz}
+              onChange={(v) => setState((s) => ({ ...s, ssb: { ...s.ssb, modulatorHz: v } }))}
+            />
+            <Slider
+              label="Amplitude"
+              min={0}
+              max={1}
+              step={0.01}
+              value={state.ssb.amplitude}
+              onChange={(v) => setState((s) => ({ ...s, ssb: { ...s.ssb, amplitude: v } }))}
+            />
+            <label>
+              Sideband
+              <select
+                value={state.ssb.sideband}
+                onChange={(e) =>
+                  setState((s) => ({
+                    ...s,
+                    ssb: { ...s.ssb, sideband: e.target.value as 'usb' | 'lsb' }
+                  }))
+                }
+              >
+                <option value="usb">USB</option>
+                <option value="lsb">LSB</option>
+              </select>
+            </label>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={state.ssb.carrierPilot}
+                onChange={(e) =>
+                  setState((s) => ({ ...s, ssb: { ...s.ssb, carrierPilot: e.target.checked } }))
+                }
+              />
+              Carrier pilot (−20 dB)
+            </label>
           </>
         )}
       </div>

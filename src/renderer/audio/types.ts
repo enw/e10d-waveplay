@@ -1,7 +1,8 @@
 export type WaveShape = 'sine' | 'square' | 'triangle' | 'sawtooth'
-export type SignalMode = 'basic' | 'am' | 'fm' | 'mix' | 'cw'
+export type SignalMode = 'basic' | 'am' | 'fm' | 'mix' | 'cw' | 'ssb'
 export type MixMode = 'sum' | 'product'
 export type EnvelopeShape = 'cos' | 'square'
+export type SsbSideband = 'usb' | 'lsb'
 
 export interface BasicParams {
   waveShape: WaveShape
@@ -35,6 +36,14 @@ export interface CwParams {
   amplitude: number
 }
 
+export interface SsbParams {
+  carrierHz: number
+  modulatorHz: number
+  sideband: SsbSideband
+  amplitude: number
+  carrierPilot: boolean
+}
+
 export interface SignalState {
   mode: SignalMode
   basic: BasicParams
@@ -42,6 +51,7 @@ export interface SignalState {
   fm: FmParams
   mix: MixParams
   cw: CwParams
+  ssb: SsbParams
   volume: number
   playing: boolean
 }
@@ -90,6 +100,14 @@ export const DEFAULT_CW: CwParams = {
   amplitude: 0.5
 }
 
+export const DEFAULT_SSB: SsbParams = {
+  carrierHz: 1000,
+  modulatorHz: 100,
+  sideband: 'usb',
+  amplitude: 0.5,
+  carrierPilot: false
+}
+
 export function defaultSignalState(): SignalState {
   return {
     mode: 'basic',
@@ -98,6 +116,7 @@ export function defaultSignalState(): SignalState {
     fm: { ...DEFAULT_FM },
     mix: { ...DEFAULT_MIX },
     cw: { ...DEFAULT_CW },
+    ssb: { ...DEFAULT_SSB },
     volume: 0.5,
     playing: false
   }
@@ -175,6 +194,20 @@ export function getVizHints(state: SignalState): VizHints {
           { freq: carrierHz - gateHz, label: '−fg' },
           { freq: carrierHz + gateHz, label: '+fg' }
         ]
+      }
+    }
+    case 'ssb': {
+      const { carrierHz, modulatorHz, sideband, carrierPilot } = state.ssb
+      const sideFreq =
+        sideband === 'usb' ? carrierHz + modulatorHz : carrierHz - modulatorHz
+      const labels = [{ freq: sideFreq, label: sideband.toUpperCase() }]
+      if (carrierPilot) {
+        labels.push({ freq: carrierHz, label: 'pilot' })
+      }
+      return {
+        rfHint:
+          'SSB sends one sideband — half the bandwidth of AM. Carrier suppressed saves transmit power on HF.',
+        spectrumLabels: labels
       }
     }
   }

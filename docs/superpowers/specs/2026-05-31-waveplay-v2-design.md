@@ -1,7 +1,7 @@
 # WavePlay v2 — Post-v1 Design
 
 **Date:** 2026-05-31  
-**Status:** Draft  
+**Status:** Milestones A & C implemented (2026-05-31)  
 **Depends on:** [v1 spec](./2026-05-31-waveplay-design.md)
 
 ## Summary

@@ -1,0 +1,13 @@
+{
+  "id": "ssb-lsb",
+  "name": "SSB LSB — lower sideband only",
+  "mode": "ssb",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "sideband": "lsb",
+    "amplitude": 0.5,
+    "carrierPilot": false
+  },
+  "rfAnalogy": "LSB keeps frequencies below the carrier. HF phone ops often use LSB on 40m/80m — here at 900 Hz you can hear the single sideband."
+}

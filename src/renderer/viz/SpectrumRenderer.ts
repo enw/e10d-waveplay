@@ -1,4 +1,6 @@
 import type { VizHints } from '../audio/types'
+import type { SpectrumView } from './spectrumView'
+import { defaultSpectrumView, formatViewRange, freqToX, viewSpan } from './spectrumView'
 
 const BG = '#0c0c12'
 const GRID = '#1e293b'
@@ -6,8 +8,8 @@ const GRID_MAJOR = '#334155'
 const TRACE = '#fbbf24'
 const LABEL_LINE = '#94a3b8'
 const LABEL_TEXT = '#e2e8f0'
+const AXIS_TEXT = '#64748b'
 
-const MAX_FREQ_HZ = 5000
 const DB_RANGE = 60
 
 export type SpectrumLabel = NonNullable<VizHints['spectrumLabels']>[number]
@@ -25,48 +27,65 @@ export class SpectrumRenderer {
     height: number,
     analyser: AnalyserNode,
     sampleRate: number,
-    labels?: SpectrumLabel[]
+    labels: SpectrumLabel[] | undefined,
+    view: SpectrumView
   ): void {
     analyser.getFloatFrequencyData(this.buffer)
 
     ctx.fillStyle = BG
     ctx.fillRect(0, 0, width, height)
 
-    this.drawGrid(ctx, width, height)
+    this.drawGrid(ctx, width, height, view)
 
     const binWidth = sampleRate / analyser.fftSize
-    const binCount = Math.min(
-      this.buffer.length,
-      Math.ceil(MAX_FREQ_HZ / binWidth) + 1
-    )
+    const startBin = Math.max(0, Math.floor(view.minHz / binWidth))
+    const endBin = Math.min(this.buffer.length - 1, Math.ceil(view.maxHz / binWidth))
 
     let peakDb = -Infinity
-    for (let i = 0; i < binCount; i++) {
+    for (let i = startBin; i <= endBin; i++) {
       if (this.buffer[i] > peakDb) peakDb = this.buffer[i]
     }
     if (!Number.isFinite(peakDb)) peakDb = 0
 
-    this.drawSpectrum(ctx, width, height, binWidth, binCount, peakDb)
+    this.drawSpectrum(ctx, width, height, binWidth, startBin, endBin, peakDb, view)
 
     if (labels?.length) {
-      this.drawLabels(ctx, width, height, binWidth, peakDb, labels)
+      this.drawLabels(ctx, width, height, binWidth, peakDb, labels, view)
     }
+
+    this.drawViewLabel(ctx, width, height, view)
   }
 
-  renderIdle(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  renderIdle(ctx: CanvasRenderingContext2D, width: number, height: number, view?: SpectrumView): void {
+    const v = view ?? defaultSpectrumView()
     ctx.fillStyle = BG
     ctx.fillRect(0, 0, width, height)
-    this.drawGrid(ctx, width, height)
+    this.drawGrid(ctx, width, height, v)
     ctx.fillStyle = '#64748b'
     ctx.font = '13px ui-monospace, SFMono-Regular, Menlo, monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText('Press Play to start', width / 2, height / 2)
+    this.drawViewLabel(ctx, width, height, v)
   }
 
-  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  private drawViewLabel(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    view: SpectrumView
+  ): void {
+    ctx.fillStyle = AXIS_TEXT
+    ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'bottom'
+    ctx.fillText(formatViewRange(view), width - 6, height - 4)
+  }
+
+  private drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, view: SpectrumView): void {
     const freqDivisions = 5
     const dbDivisions = 6
+    const span = viewSpan(view)
 
     ctx.strokeStyle = GRID
     ctx.lineWidth = 1
@@ -92,6 +111,16 @@ export class SpectrumRenderer {
     ctx.moveTo(0, height - 1)
     ctx.lineTo(width, height - 1)
     ctx.stroke()
+
+    ctx.fillStyle = AXIS_TEXT
+    ctx.font = '9px ui-monospace, SFMono-Regular, Menlo, monospace'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'top'
+    for (let i = 0; i <= freqDivisions; i++) {
+      const x = (i / freqDivisions) * width
+      const freq = view.minHz + (i / freqDivisions) * span
+      ctx.fillText(`${Math.round(freq)}`, x, height - 14)
+    }
   }
 
   private dbToY(relativeDb: number, height: number): number {
@@ -104,23 +133,28 @@ export class SpectrumRenderer {
     width: number,
     height: number,
     binWidth: number,
-    binCount: number,
-    peakDb: number
+    startBin: number,
+    endBin: number,
+    peakDb: number,
+    view: SpectrumView
   ): void {
     ctx.strokeStyle = TRACE
     ctx.lineWidth = 1.5
     ctx.beginPath()
 
-    for (let i = 0; i < binCount; i++) {
+    let started = false
+    for (let i = startBin; i <= endBin; i++) {
       const freq = i * binWidth
-      if (freq > MAX_FREQ_HZ) break
-
-      const x = (freq / MAX_FREQ_HZ) * width
+      const x = freqToX(freq, width, view)
       const relativeDb = this.buffer[i] - peakDb
       const y = this.dbToY(relativeDb, height)
 
-      if (i === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
+      if (!started) {
+        ctx.moveTo(x, y)
+        started = true
+      } else {
+        ctx.lineTo(x, y)
+      }
     }
 
     ctx.stroke()
@@ -132,22 +166,23 @@ export class SpectrumRenderer {
     height: number,
     binWidth: number,
     peakDb: number,
-    labels: SpectrumLabel[]
+    labels: SpectrumLabel[],
+    view: SpectrumView
   ): void {
     ctx.save()
     ctx.font = '11px ui-monospace, SFMono-Regular, Menlo, monospace'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'bottom'
 
+    const margin = viewSpan(view) * 0.02
     for (const { freq, label } of labels) {
-      if (freq < 0 || freq > MAX_FREQ_HZ) continue
+      if (freq < view.minHz - margin || freq > view.maxHz + margin) continue
 
       const bin = Math.min(
         this.buffer.length - 1,
         Math.max(0, Math.round(freq / binWidth))
       )
-      const markerFreq = bin * binWidth
-      const x = (markerFreq / MAX_FREQ_HZ) * width
+      const x = freqToX(bin * binWidth, width, view)
       const relativeDb = this.buffer[bin] - peakDb
       const peakY = this.dbToY(relativeDb, height)
 
@@ -155,7 +190,7 @@ export class SpectrumRenderer {
       ctx.lineWidth = 1
       ctx.setLineDash([3, 3])
       ctx.beginPath()
-      ctx.moveTo(x, height)
+      ctx.moveTo(x, height - 16)
       ctx.lineTo(x, Math.max(14, peakY - 4))
       ctx.stroke()
 
