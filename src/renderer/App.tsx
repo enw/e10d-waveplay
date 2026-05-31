@@ -17,7 +17,8 @@ const MODES: { id: SignalMode; label: string }[] = [
   { id: 'basic', label: 'Basic' },
   { id: 'am', label: 'AM' },
   { id: 'fm', label: 'FM' },
-  { id: 'mix', label: 'Mix' }
+  { id: 'mix', label: 'Mix' },
+  { id: 'cw', label: 'CW' }
 ]
 
 const SHAPES: WaveShape[] = ['sine', 'square', 'triangle', 'sawtooth']
@@ -29,6 +30,9 @@ export default function App() {
   const [rfAnalogy, setRfAnalogy] = useState('')
   const [presetId, setPresetId] = useState<string>('')
   const [exportDuration, setExportDuration] = useState(3)
+  const stateRef = useRef(state)
+
+  stateRef.current = state
 
   if (!graphRef.current) {
     graphRef.current = new SignalGraph()
@@ -43,20 +47,39 @@ export default function App() {
   }, [graph, state.volume])
 
   useEffect(() => {
-    if (state.playing) {
-      graph.updateParams(state)
-    }
-  }, [graph, state])
+    if (!state.playing) return
+    graph.updateParams(state)
+  }, [graph, state.mode, state.basic, state.am, state.fm, state.mix, state.cw, state.playing])
 
   const togglePlay = useCallback(async () => {
-    if (state.playing) {
+    const current = stateRef.current
+    if (current.playing) {
       graph.stop()
       setState((s) => ({ ...s, playing: false }))
     } else {
-      await graph.start(state)
+      await graph.start(stateRef.current)
       setState((s) => ({ ...s, playing: true }))
     }
-  }, [graph, state])
+  }, [graph])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.code !== 'Space' || event.repeat) return
+      const target = event.target
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement
+      ) {
+        return
+      }
+      event.preventDefault()
+      void togglePlay()
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [togglePlay])
 
   const setMode = (mode: SignalMode) => {
     setPresetId('')
@@ -67,11 +90,17 @@ export default function App() {
   const applyPreset = (preset: Preset) => {
     setPresetId(preset.id)
     setRfAnalogy(preset.rfAnalogy)
-    setState((s) => ({
-      ...s,
-      mode: preset.mode,
-      [preset.mode]: preset.params
-    }))
+    setState((s) => {
+      const next: SignalState = {
+        ...s,
+        mode: preset.mode,
+        [preset.mode]: preset.params
+      } as SignalState
+      if (s.playing) {
+        graph.rebuild(next)
+      }
+      return next
+    })
   }
 
   const paramsSummary = (): string => {
@@ -84,6 +113,8 @@ export default function App() {
         return `fc=${state.fm.carrierHz} fm=${state.fm.modulatorHz} dev=${state.fm.deviationHz} Hz`
       case 'mix':
         return `${state.mix.oscAHz}+${state.mix.oscBHz} Hz (${state.mix.mixMode})`
+      case 'cw':
+        return `fc=${state.cw.carrierHz} gate=${state.cw.gateHz} Hz`
     }
   }
 
@@ -285,12 +316,41 @@ export default function App() {
             </label>
           </>
         )}
+
+        {state.mode === 'cw' && (
+          <>
+            <Slider
+              label="Carrier (Hz)"
+              min={100}
+              max={4000}
+              value={state.cw.carrierHz}
+              onChange={(v) => setState((s) => ({ ...s, cw: { ...s.cw, carrierHz: v } }))}
+            />
+            <Slider
+              label="Gate rate (Hz)"
+              min={0.5}
+              max={20}
+              step={0.5}
+              value={state.cw.gateHz}
+              onChange={(v) => setState((s) => ({ ...s, cw: { ...s.cw, gateHz: v } }))}
+            />
+            <Slider
+              label="Amplitude"
+              min={0}
+              max={1}
+              step={0.01}
+              value={state.cw.amplitude}
+              onChange={(v) => setState((s) => ({ ...s, cw: { ...s.cw, amplitude: v } }))}
+            />
+          </>
+        )}
       </div>
 
       <footer className="transport">
         <button type="button" className="btn primary" onClick={() => void togglePlay()}>
           {state.playing ? 'Stop' : 'Play'}
         </button>
+        <span className="kbd-hint">Space</span>
         <Slider
           label="Volume"
           min={0}

@@ -1,11 +1,11 @@
 {
   "id": "cw-gate",
   "name": "CW intuition",
-  "mode": "basic",
+  "mode": "cw",
   "params": {
-    "waveShape": "sine",
-    "frequencyHz": 800,
+    "carrierHz": 800,
+    "gateHz": 5,
     "amplitude": 0.5
   },
-  "rfAnalogy": "CW is a steady carrier keyed on and off — this pure 800 Hz tone is the 'on' state; imagine silence between dits and dahs."
+  "rfAnalogy": "CW keys the carrier on and off at ~5 Hz here so you can hear and see the gating. On the air, dits and dahs are much faster bursts of the same idea."
 }

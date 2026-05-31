@@ -91,8 +91,10 @@ export class ScopeRenderer {
     envelope: EnvelopeHint
   ): void {
     const m = envelope.max
+    const mMin = envelope.min
     const fm = envelope.modulatorHz
     const duration = bufferLength / sampleRate
+    const shape = envelope.shape ?? 'cos'
 
     ctx.save()
     ctx.strokeStyle = ENVELOPE
@@ -100,25 +102,35 @@ export class ScopeRenderer {
     ctx.setLineDash([6, 4])
     ctx.globalAlpha = 0.85
 
+    const envelopeAmp = (t: number): number => {
+      if (shape === 'square') {
+        const on = Math.sin(2 * Math.PI * fm * t) >= 0 ? 1 : 0
+        return mMin + (m - mMin) * on
+      }
+      return m * Math.cos(2 * Math.PI * fm * t)
+    }
+
     ctx.beginPath()
     for (let x = 0; x <= width; x++) {
       const t = (x / width) * duration
-      const amp = m * Math.cos(2 * Math.PI * fm * t)
+      const amp = envelopeAmp(t)
       const y = midY - amp * ampScale
       if (x === 0) ctx.moveTo(x, y)
       else ctx.lineTo(x, y)
     }
     ctx.stroke()
 
-    ctx.beginPath()
-    for (let x = 0; x <= width; x++) {
-      const t = (x / width) * duration
-      const amp = -m * Math.cos(2 * Math.PI * fm * t)
-      const y = midY - amp * ampScale
-      if (x === 0) ctx.moveTo(x, y)
-      else ctx.lineTo(x, y)
+    if (shape !== 'square') {
+      ctx.beginPath()
+      for (let x = 0; x <= width; x++) {
+        const t = (x / width) * duration
+        const amp = -m * Math.cos(2 * Math.PI * fm * t)
+        const y = midY - amp * ampScale
+        if (x === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
     }
-    ctx.stroke()
 
     ctx.restore()
   }

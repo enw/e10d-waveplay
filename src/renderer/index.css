@@ -200,6 +200,15 @@ input[type='range'] {
   color: var(--accent);
 }
 
+.kbd-hint {
+  align-self: center;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 @media (max-width: 768px) {
   .viz-row {
     grid-template-columns: 1fr;

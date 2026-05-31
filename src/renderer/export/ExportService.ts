@@ -1,6 +1,7 @@
 import type {
   AmParams,
   BasicParams,
+  CwParams,
   FmParams,
   MixParams,
   SignalState
@@ -26,6 +27,9 @@ function buildOfflineGraph(ctx: OfflineAudioContext, state: SignalState): void {
       break
     case 'mix':
       buildMixOffline(ctx, state.mix, masterGain)
+      break
+    case 'cw':
+      buildCwOffline(ctx, state.cw, masterGain)
       break
   }
 }
@@ -137,6 +141,38 @@ function buildMixOffline(ctx: OfflineAudioContext, params: MixParams, masterGain
 
   oscA.start(0)
   oscB.start(0)
+}
+
+function buildCwOffline(ctx: OfflineAudioContext, params: CwParams, masterGain: GainNode): void {
+  const carrierHz = clampFreq(params.carrierHz)
+  const gateHz = clampFreq(params.gateHz, 0.5, 20)
+  const amp = clampAmp(params.amplitude)
+
+  const carrier = ctx.createOscillator()
+  carrier.type = 'sine'
+  carrier.frequency.value = carrierHz
+
+  const gate = ctx.createOscillator()
+  gate.type = 'square'
+  gate.frequency.value = gateHz
+
+  const modGain = ctx.createGain()
+  modGain.gain.value = amp * 0.5
+
+  const offset = ctx.createConstantSource()
+  offset.offset.value = amp * 0.5
+
+  const ampGain = ctx.createGain()
+
+  gate.connect(modGain)
+  modGain.connect(ampGain.gain)
+  offset.connect(ampGain.gain)
+  carrier.connect(ampGain)
+  ampGain.connect(masterGain)
+
+  carrier.start(0)
+  gate.start(0)
+  offset.start(0)
 }
 
 function compositeScreenshot(

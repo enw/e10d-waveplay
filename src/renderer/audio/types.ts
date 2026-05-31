@@ -1,6 +1,7 @@
 export type WaveShape = 'sine' | 'square' | 'triangle' | 'sawtooth'
-export type SignalMode = 'basic' | 'am' | 'fm' | 'mix'
+export type SignalMode = 'basic' | 'am' | 'fm' | 'mix' | 'cw'
 export type MixMode = 'sum' | 'product'
+export type EnvelopeShape = 'cos' | 'square'
 
 export interface BasicParams {
   waveShape: WaveShape
@@ -40,12 +41,19 @@ export interface SignalState {
   am: AmParams
   fm: FmParams
   mix: MixParams
+  cw: CwParams
   volume: number
   playing: boolean
 }
 
 export interface VizHints {
-  envelope?: { min: number; max: number; modulatorHz: number; carrierHz: number }
+  envelope?: {
+    min: number
+    max: number
+    modulatorHz: number
+    carrierHz: number
+    shape?: EnvelopeShape
+  }
   spectrumLabels?: { freq: number; label: string }[]
   rfHint: string
 }
@@ -76,6 +84,12 @@ export const DEFAULT_MIX: MixParams = {
   mixMode: 'sum'
 }
 
+export const DEFAULT_CW: CwParams = {
+  carrierHz: 800,
+  gateHz: 5,
+  amplitude: 0.5
+}
+
 export function defaultSignalState(): SignalState {
   return {
     mode: 'basic',
@@ -83,6 +97,7 @@ export function defaultSignalState(): SignalState {
     am: { ...DEFAULT_AM },
     fm: { ...DEFAULT_FM },
     mix: { ...DEFAULT_MIX },
+    cw: { ...DEFAULT_CW },
     volume: 0.5,
     playing: false
   }
@@ -142,6 +157,24 @@ export function getVizHints(state: SignalState): VizHints {
       return {
         rfHint: 'Superheterodyne mixing: local oscillator + incoming signal → IF at the difference frequency.',
         spectrumLabels: labels
+      }
+    }
+    case 'cw': {
+      const { carrierHz, gateHz } = state.cw
+      return {
+        rfHint: 'CW keys the carrier on and off — no voice sidebands, just carrier present or absent.',
+        envelope: {
+          min: 0,
+          max: 1,
+          modulatorHz: gateHz,
+          carrierHz,
+          shape: 'square'
+        },
+        spectrumLabels: [
+          { freq: carrierHz, label: 'carrier' },
+          { freq: carrierHz - gateHz, label: '−fg' },
+          { freq: carrierHz + gateHz, label: '+fg' }
+        ]
       }
     }
   }

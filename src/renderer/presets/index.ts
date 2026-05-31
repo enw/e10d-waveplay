@@ -1,4 +1,4 @@
-import type { AmParams, BasicParams, FmParams, MixParams } from '@/audio/types'
+import type { AmParams, BasicParams, CwParams, FmParams, MixParams } from '@/audio/types'
 
 import am100pct from './am-100pct.json'
 import amLowMod from './am-low-mod.json'
@@ -20,6 +20,7 @@ export type Preset =
   | (PresetBase & { mode: 'am'; params: AmParams })
   | (PresetBase & { mode: 'fm'; params: FmParams })
   | (PresetBase & { mode: 'mix'; params: MixParams })
+  | (PresetBase & { mode: 'cw'; params: CwParams })
 
 export const PRESETS: Preset[] = [
   pure1khz as Preset,

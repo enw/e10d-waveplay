@@ -20,6 +20,7 @@ describe('types', () => {
       am: { carrierHz: 1000, modulatorHz: 100, modulationIndex: 1 },
       fm: { carrierHz: 440, modulatorHz: 5, deviationHz: 25 },
       mix: { oscAHz: 1000, oscAAmp: 0.5, oscBHz: 1005, oscBAmp: 0.5, mixMode: 'sum' },
+      cw: { carrierHz: 800, gateHz: 5, amplitude: 0.5 },
       volume: 0.5,
       playing: false
     })

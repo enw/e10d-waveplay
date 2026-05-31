@@ -1,4 +1,4 @@
-import type { AmParams, BasicParams, FmParams, MixParams, SignalMode, SignalState, WaveShape } from './types'
+import type { AmParams, BasicParams, CwParams, FmParams, MixParams, SignalMode, SignalState, WaveShape } from './types'
 import { clampAmp, clampFreq, clampModIndex } from './types'
 
 type Disposer = () => void
@@ -70,6 +70,8 @@ export class SignalGraph {
         return this.buildFm(state.fm)
       case 'mix':
         return this.buildMix(state.mix)
+      case 'cw':
+        return this.buildCw(state.cw)
     }
   }
 
@@ -219,6 +221,49 @@ export class SignalGraph {
       oscB.disconnect()
       gainA.disconnect()
       gainB.disconnect()
+    }
+  }
+
+  private buildCw(params: CwParams): Disposer {
+    const carrierHz = clampFreq(params.carrierHz)
+    const gateHz = clampFreq(params.gateHz, 0.5, 20)
+    const amp = clampAmp(params.amplitude)
+
+    const carrier = this.context.createOscillator()
+    carrier.type = 'sine'
+    carrier.frequency.value = carrierHz
+
+    const gate = this.context.createOscillator()
+    gate.type = 'square'
+    gate.frequency.value = gateHz
+
+    const modGain = this.context.createGain()
+    modGain.gain.value = amp * 0.5
+
+    const offset = this.context.createConstantSource()
+    offset.offset.value = amp * 0.5
+
+    const ampGain = this.context.createGain()
+
+    gate.connect(modGain)
+    modGain.connect(ampGain.gain)
+    offset.connect(ampGain.gain)
+    carrier.connect(ampGain)
+    ampGain.connect(this.masterGain)
+
+    carrier.start()
+    gate.start()
+    offset.start()
+
+    return () => {
+      carrier.stop()
+      gate.stop()
+      offset.stop()
+      carrier.disconnect()
+      gate.disconnect()
+      modGain.disconnect()
+      offset.disconnect()
+      ampGain.disconnect()
     }
   }
 }
