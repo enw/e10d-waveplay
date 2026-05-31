@@ -1,0 +1,11 @@
+{
+  "id": "am-low-mod",
+  "name": "AM low modulation",
+  "mode": "am",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "modulationIndex": 0.3
+  },
+  "rfAnalogy": "Same carrier and modulator, but lower m means weaker sidebands — compare the spectrum to 100% AM."
+}

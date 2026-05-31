@@ -1,0 +1,11 @@
+{
+  "id": "pure-1khz",
+  "name": "Pure 1 kHz tone",
+  "mode": "basic",
+  "params": {
+    "waveShape": "sine",
+    "frequencyHz": 1000,
+    "amplitude": 0.5
+  },
+  "rfAnalogy": "Unmodulated carrier — the steady tone you hear before anyone keys the mic."
+}

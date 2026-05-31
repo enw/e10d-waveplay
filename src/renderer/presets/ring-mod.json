@@ -1,0 +1,13 @@
+{
+  "id": "ring-mod",
+  "name": "Ring mod heterodyne",
+  "mode": "mix",
+  "params": {
+    "oscAHz": 500,
+    "oscAAmp": 0.5,
+    "oscBHz": 520,
+    "oscBAmp": 0.5,
+    "mixMode": "product"
+  },
+  "rfAnalogy": "Product mixing emphasizes sum and difference frequencies — the core of superheterodyne conversion and SSB generation."
+}

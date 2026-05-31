@@ -1,0 +1,11 @@
+{
+  "id": "fm-narrow",
+  "name": "FM narrow deviation",
+  "mode": "fm",
+  "params": {
+    "carrierHz": 440,
+    "modulatorHz": 5,
+    "deviationHz": 25
+  },
+  "rfAnalogy": "Narrow deviation FM — a few sidebands close to the carrier, like NBFM voice on 2m."
+}

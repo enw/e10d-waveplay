@@ -1,0 +1,13 @@
+{
+  "id": "beat-5hz",
+  "name": "Beat frequency 5 Hz",
+  "mode": "mix",
+  "params": {
+    "oscAHz": 1000,
+    "oscAAmp": 0.5,
+    "oscBHz": 1005,
+    "oscBAmp": 0.5,
+    "mixMode": "sum"
+  },
+  "rfAnalogy": "Two close tones beat at |f1−f2| — the same idea as mixing a local oscillator with an incoming signal to produce an IF."
+}

@@ -1,0 +1,11 @@
+{
+  "id": "am-100pct",
+  "name": "AM at 100% — see the sidebands",
+  "mode": "am",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "modulationIndex": 1.0
+  },
+  "rfAnalogy": "On HF AM, your voice (≈300–3000 Hz) modulates the carrier. Here we use 100 Hz so the envelope is visible on the scope."
+}

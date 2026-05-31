@@ -1,0 +1,11 @@
+{
+  "id": "cw-gate",
+  "name": "CW intuition",
+  "mode": "basic",
+  "params": {
+    "waveShape": "sine",
+    "frequencyHz": 800,
+    "amplitude": 0.5
+  },
+  "rfAnalogy": "CW is a steady carrier keyed on and off — this pure 800 Hz tone is the 'on' state; imagine silence between dits and dahs."
+}

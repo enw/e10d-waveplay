@@ -1,0 +1,11 @@
+{
+  "id": "fm-wide",
+  "name": "FM wide deviation",
+  "mode": "fm",
+  "params": {
+    "carrierHz": 440,
+    "modulatorHz": 100,
+    "deviationHz": 200
+  },
+  "rfAnalogy": "Wide deviation spreads energy across many Bessel sidebands — closer to broadcast FM than narrow voice channels."
+}
