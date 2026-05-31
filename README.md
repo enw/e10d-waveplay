@@ -15,13 +15,20 @@ Click **Play** to start the audio context, then try presets or tweak controls.
 
 ## Features
 
+### Core (v1)
+
 - **Basic waveforms** — sine, square, triangle, saw (20 Hz–4 kHz)
-- **AM** — carrier, modulator, modulation index; envelope on scope; sideband labels
-- **FM** — deviation in Hz; spectrum annotations
-- **Mix** — sum (beat) or product (ring mod)
-- **Scope + spectrum** — real-time dual visualization
-- **8 presets** — radio-themed scenarios with RF analogy notes
+- **AM / FM / Mix / CW / SSB** — modulation modes with scope + spectrum labels
+- **Waterfall + zoomable spectrum**
+- **Quiz mode** — identify modulation from audio + viz
 - **Export** — WAV (1/3/5 s) and PNG screenshot
+
+### v3 lab extensions
+
+- **Mic modulator** — speak into AM, FM, or SSB; live sidebands from your voice
+- **Parameter sweeps** — animate modulation index, deviation, filter BW, LO, etc.
+- **IF bandpass filter** — overlay on any mode; ghost response on spectrum
+- **Superheterodyne chain** — RF → Mixer → IF → Demod block diagram with stage-selectable viz
 
 ## Scripts
 
@@ -34,8 +41,9 @@ Click **Play** to start the audio context, then try presets or tweak controls.
 
 ## Docs
 
-- Design spec: [`docs/superpowers/specs/2026-05-31-waveplay-design.md`](docs/superpowers/specs/2026-05-31-waveplay-design.md)
-- Implementation plan: [`docs/superpowers/plans/2026-05-31-waveplay-implementation.md`](docs/superpowers/plans/2026-05-31-waveplay-implementation.md)
+- v1 spec: [`docs/superpowers/specs/2026-05-31-waveplay-design.md`](docs/superpowers/specs/2026-05-31-waveplay-design.md)
+- v3 spec: [`docs/superpowers/specs/2026-05-31-waveplay-v3-design.md`](docs/superpowers/specs/2026-05-31-waveplay-v3-design.md)
+- v3 plan: [`docs/superpowers/plans/2026-05-31-waveplay-v3-implementation.md`](docs/superpowers/plans/2026-05-31-waveplay-v3-implementation.md)
 
 ## Tech
 

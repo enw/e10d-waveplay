@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { SignalGraph } from '@/audio/SignalGraph'
+import { SweepController } from '@/audio/SweepController'
 import {
   defaultSignalState,
   getVizHints,
+  mergePresetParams,
+  usesMicModulator,
   type SignalMode,
   type SignalState,
+  type SuperhetStage,
   type WaveShape
 } from '@/audio/types'
 import Scope from '@/components/Scope'
@@ -12,9 +16,14 @@ import Spectrum from '@/components/Spectrum'
 import Waterfall from '@/components/Waterfall'
 import PresetPicker from '@/components/PresetPicker'
 import QuizPanel from '@/components/QuizPanel'
+import ModulatorSourcePanel from '@/components/ModulatorSourcePanel'
+import FilterPanel, { SuperhetIfPanel } from '@/components/FilterPanel'
+import SweepPanel, { defaultSweepConfig } from '@/components/SweepPanel'
+import SuperhetDiagram from '@/components/SuperhetDiagram'
 import type { Preset } from '@/presets'
 import { exportScreenshot, exportWav } from '@/export/ExportService'
 import { defaultSpectrumView, type SpectrumView } from '@/viz/spectrumView'
+import type { SweepConfig } from '@/audio/SweepController'
 import {
   advanceToGuess,
   applyPresetToState,
@@ -33,7 +42,8 @@ const MODES: { id: SignalMode; label: string }[] = [
   { id: 'fm', label: 'FM' },
   { id: 'mix', label: 'Mix' },
   { id: 'cw', label: 'CW' },
-  { id: 'ssb', label: 'SSB' }
+  { id: 'ssb', label: 'SSB' },
+  { id: 'superhet', label: 'Superhet' }
 ]
 
 const SHAPES: WaveShape[] = ['sine', 'square', 'triangle', 'sawtooth']
@@ -50,6 +60,11 @@ export default function App() {
   const [presetId, setPresetId] = useState<string>('')
   const [exportDuration, setExportDuration] = useState(3)
   const [spectrumView, setSpectrumView] = useState<SpectrumView>(defaultSpectrumView)
+  const [superhetStage, setSuperhetStage] = useState<SuperhetStage>('audio')
+  const [sweepConfig, setSweepConfig] = useState<SweepConfig>(() => defaultSweepConfig('basic'))
+  const [micError, setMicError] = useState<string | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
+  const sweepRef = useRef(new SweepController())
   const stateRef = useRef(state)
 
   stateRef.current = state
@@ -70,8 +85,48 @@ export default function App() {
 
   useEffect(() => {
     if (!state.playing) return
-    graph.updateParams(state)
-  }, [graph, state.mode, state.basic, state.am, state.fm, state.mix, state.cw, state.ssb, state.playing])
+    void graph.updateParams(state).catch((err: unknown) => {
+      setMicError(err instanceof Error ? err.message : 'Microphone error')
+    })
+  }, [
+    graph,
+    state.mode,
+    state.basic,
+    state.am,
+    state.fm,
+    state.mix,
+    state.cw,
+    state.ssb,
+    state.superhet,
+    state.filter,
+    state.playing
+  ])
+
+  useEffect(() => {
+    if (state.mode === 'superhet') {
+      graph.setSuperhetStage(superhetStage)
+    }
+  }, [graph, state.mode, superhetStage])
+
+  useEffect(() => {
+    sweepRef.current.stop()
+    if (!state.playing || !sweepConfig.enabled) return
+
+    sweepRef.current.start(sweepConfig, 0, (value) => {
+      graph.scheduleSweepParam(sweepConfig.paramKey, value, stateRef.current)
+      setState((s) => {
+        const [section, field] = sweepConfig.paramKey.split('.')
+        if (section === 'filter') {
+          return { ...s, filter: { ...s.filter, [field!]: value } }
+        }
+        const block = s[section as keyof SignalState]
+        if (typeof block !== 'object' || block === null) return s
+        return { ...s, [section]: { ...block, [field!]: value } } as SignalState
+      })
+    })
+
+    return () => sweepRef.current.stop()
+  }, [graph, state.playing, sweepConfig])
 
   const clearListenTimer = (): void => {
     if (listenTimerRef.current !== null) {
@@ -89,8 +144,13 @@ export default function App() {
       graph.stop()
       setState((s) => ({ ...s, playing: false }))
     } else {
-      await graph.start(stateRef.current)
-      setState((s) => ({ ...s, playing: true }))
+      setMicError(null)
+      try {
+        await graph.start(stateRef.current)
+        setState((s) => ({ ...s, playing: true }))
+      } catch (err) {
+        setMicError(err instanceof Error ? err.message : 'Microphone error')
+      }
     }
   }, [graph, appMode, quiz.phase])
 
@@ -116,21 +176,33 @@ export default function App() {
   const setMode = (mode: SignalMode) => {
     setPresetId('')
     setRfAnalogy('')
+    setSweepConfig(defaultSweepConfig(mode))
     setState((s) => ({ ...s, mode }))
   }
 
   const applyPreset = (preset: Preset) => {
     setPresetId(preset.id)
     setRfAnalogy(preset.rfAnalogy)
+    if (preset.filter) {
+      setState((s) => {
+        const next: SignalState = {
+          ...s,
+          mode: preset.mode,
+          [preset.mode]: mergePresetParams(preset.mode, preset.params),
+          filter: preset.filter ?? s.filter
+        } as SignalState
+        if (s.playing) void graph.updateParams(next)
+        return next
+      })
+      return
+    }
     setState((s) => {
       const next: SignalState = {
         ...s,
         mode: preset.mode,
-        [preset.mode]: preset.params
+        [preset.mode]: mergePresetParams(preset.mode, preset.params)
       } as SignalState
-      if (s.playing) {
-        graph.rebuild(next)
-      }
+      if (s.playing) void graph.updateParams(next)
       return next
     })
   }
@@ -191,12 +263,18 @@ export default function App() {
       case 'cw':
         return `fc=${state.cw.carrierHz} gate=${state.cw.gateHz} Hz`
       case 'ssb':
-        return `${state.ssb.sideband.toUpperCase()} fc=${state.ssb.carrierHz} fm=${state.ssb.modulatorHz}${state.ssb.carrierPilot ? ' +pilot' : ''}`
+        return `${state.ssb.sideband.toUpperCase()} fc=${state.ssb.carrierHz} fm=${state.ssb.modulatorHz}${state.ssb.carrierPilot ? ' +pilot' : ''}${state.ssb.modulatorSource === 'mic' ? ' mic' : ''}`
+      case 'superhet':
+        return `RF=${state.superhet.rfCarrierHz} LO=${state.superhet.loHz} IF=${state.superhet.ifCenterHz}`
     }
   }
 
+  const micModActive = usesMicModulator(state) && graph.micInput.active
+
   const handleExportWav = async () => {
-    await exportWav(state, exportDuration)
+    setExportError(null)
+    const result = await exportWav(state, exportDuration)
+    if (result.error) setExportError(result.error)
   }
 
   const handleScreenshot = async () => {
@@ -240,6 +318,16 @@ export default function App() {
         </div>
       </header>
 
+      {state.mode === 'superhet' && appMode === 'study' && (
+        <SuperhetDiagram
+          stage={superhetStage}
+          onStageChange={(stage) => {
+            setSuperhetStage(stage)
+            graph.setSuperhetStage(stage)
+          }}
+        />
+      )}
+
       <div className="viz-row viz-row-3">
         <div className="viz-panel">
           <div className="viz-label">Scope</div>
@@ -247,6 +335,9 @@ export default function App() {
             analyser={graph.analyser}
             active={state.playing}
             envelope={hideStudyEnvelope ? undefined : hints.envelope}
+            micAnalyser={
+              hints.envelope?.micLive ? graph.micInput.levelAnalyser : undefined
+            }
           />
         </div>
         <div className="viz-panel spectrum-panel">
@@ -258,6 +349,7 @@ export default function App() {
             sampleRate={graph.context.sampleRate}
             view={spectrumView}
             onViewChange={setSpectrumView}
+            filterOverlay={hints.filterOverlay}
           />
         </div>
         <div className="viz-panel waterfall-panel">
@@ -343,6 +435,15 @@ export default function App() {
 
             {state.mode === 'am' && (
               <>
+                <ModulatorSourcePanel
+                  params={state.am}
+                  micInput={graph.micInput}
+                  micActive={micModActive}
+                  micError={micError}
+                  onChange={(patch) =>
+                    setState((s) => ({ ...s, am: { ...s.am, ...patch } }))
+                  }
+                />
                 <Slider
                   label="Carrier (Hz)"
                   min={100}
@@ -350,18 +451,21 @@ export default function App() {
                   value={state.am.carrierHz}
                   onChange={(v) => setState((s) => ({ ...s, am: { ...s.am, carrierHz: v } }))}
                 />
-                <Slider
-                  label="Modulator (Hz)"
-                  min={1}
-                  max={500}
-                  value={state.am.modulatorHz}
-                  onChange={(v) => setState((s) => ({ ...s, am: { ...s.am, modulatorHz: v } }))}
-                />
+                {state.am.modulatorSource === 'tone' && (
+                  <Slider
+                    label="Modulator (Hz)"
+                    min={1}
+                    max={500}
+                    value={state.am.modulatorHz}
+                    onChange={(v) => setState((s) => ({ ...s, am: { ...s.am, modulatorHz: v } }))}
+                  />
+                )}
                 <Slider
                   label="Modulation index (%)"
                   min={0}
                   max={100}
                   value={state.am.modulationIndex * 100}
+                  disabled={sweepConfig.enabled && sweepConfig.paramKey === 'am.modulationIndex'}
                   onChange={(v) =>
                     setState((s) => ({ ...s, am: { ...s.am, modulationIndex: v / 100 } }))
                   }
@@ -371,6 +475,15 @@ export default function App() {
 
             {state.mode === 'fm' && (
               <>
+                <ModulatorSourcePanel
+                  params={state.fm}
+                  micInput={graph.micInput}
+                  micActive={micModActive}
+                  micError={micError}
+                  onChange={(patch) =>
+                    setState((s) => ({ ...s, fm: { ...s.fm, ...patch } }))
+                  }
+                />
                 <Slider
                   label="Carrier (Hz)"
                   min={100}
@@ -378,18 +491,21 @@ export default function App() {
                   value={state.fm.carrierHz}
                   onChange={(v) => setState((s) => ({ ...s, fm: { ...s.fm, carrierHz: v } }))}
                 />
-                <Slider
-                  label="Modulator (Hz)"
-                  min={1}
-                  max={500}
-                  value={state.fm.modulatorHz}
-                  onChange={(v) => setState((s) => ({ ...s, fm: { ...s.fm, modulatorHz: v } }))}
-                />
+                {state.fm.modulatorSource === 'tone' && (
+                  <Slider
+                    label="Modulator (Hz)"
+                    min={1}
+                    max={500}
+                    value={state.fm.modulatorHz}
+                    onChange={(v) => setState((s) => ({ ...s, fm: { ...s.fm, modulatorHz: v } }))}
+                  />
+                )}
                 <Slider
                   label="Deviation (Hz)"
                   min={0}
                   max={500}
                   value={state.fm.deviationHz}
+                  disabled={sweepConfig.enabled && sweepConfig.paramKey === 'fm.deviationHz'}
                   onChange={(v) => setState((s) => ({ ...s, fm: { ...s.fm, deviationHz: v } }))}
                 />
               </>
@@ -475,6 +591,15 @@ export default function App() {
 
             {state.mode === 'ssb' && (
               <>
+                <ModulatorSourcePanel
+                  params={state.ssb}
+                  micInput={graph.micInput}
+                  micActive={micModActive}
+                  micError={micError}
+                  onChange={(patch) =>
+                    setState((s) => ({ ...s, ssb: { ...s.ssb, ...patch } }))
+                  }
+                />
                 <Slider
                   label="Carrier (Hz)"
                   min={100}
@@ -482,13 +607,17 @@ export default function App() {
                   value={state.ssb.carrierHz}
                   onChange={(v) => setState((s) => ({ ...s, ssb: { ...s.ssb, carrierHz: v } }))}
                 />
-                <Slider
-                  label="Modulator (Hz)"
-                  min={1}
-                  max={500}
-                  value={state.ssb.modulatorHz}
-                  onChange={(v) => setState((s) => ({ ...s, ssb: { ...s.ssb, modulatorHz: v } }))}
-                />
+                {state.ssb.modulatorSource === 'tone' && (
+                  <Slider
+                    label="Modulator (Hz)"
+                    min={1}
+                    max={500}
+                    value={state.ssb.modulatorHz}
+                    onChange={(v) =>
+                      setState((s) => ({ ...s, ssb: { ...s.ssb, modulatorHz: v } }))
+                    }
+                  />
+                )}
                 <Slider
                   label="Amplitude"
                   min={0}
@@ -526,6 +655,71 @@ export default function App() {
                 </label>
               </>
             )}
+
+            {state.mode === 'superhet' && (
+              <>
+                <Slider
+                  label="RF carrier (Hz)"
+                  min={100}
+                  max={4000}
+                  value={state.superhet.rfCarrierHz}
+                  onChange={(v) =>
+                    setState((s) => ({ ...s, superhet: { ...s.superhet, rfCarrierHz: v } }))
+                  }
+                />
+                <Slider
+                  label="RF modulator (Hz)"
+                  min={1}
+                  max={500}
+                  value={state.superhet.rfModHz}
+                  onChange={(v) =>
+                    setState((s) => ({ ...s, superhet: { ...s.superhet, rfModHz: v } }))
+                  }
+                />
+                <Slider
+                  label="Modulation index (%)"
+                  min={0}
+                  max={100}
+                  value={state.superhet.modulationIndex * 100}
+                  onChange={(v) =>
+                    setState((s) => ({
+                      ...s,
+                      superhet: { ...s.superhet, modulationIndex: v / 100 }
+                    }))
+                  }
+                />
+                <Slider
+                  label="LO (Hz)"
+                  min={100}
+                  max={4000}
+                  value={state.superhet.loHz}
+                  disabled={sweepConfig.enabled && sweepConfig.paramKey === 'superhet.loHz'}
+                  onChange={(v) =>
+                    setState((s) => ({ ...s, superhet: { ...s.superhet, loHz: v } }))
+                  }
+                />
+                <SuperhetIfPanel
+                  superhet={state.superhet}
+                  onChange={(patch) =>
+                    setState((s) => ({ ...s, superhet: { ...s.superhet, ...patch } }))
+                  }
+                />
+              </>
+            )}
+
+            <FilterPanel
+              filter={state.filter}
+              mode={state.mode}
+              state={state}
+              onChange={(patch) => setState((s) => ({ ...s, filter: { ...s.filter, ...patch } }))}
+            />
+
+            <SweepPanel
+              mode={state.mode}
+              filterEnabled={state.filter.enabled}
+              config={sweepConfig}
+              onChange={setSweepConfig}
+            />
           </div>
 
           <footer className="transport">
@@ -552,9 +746,20 @@ export default function App() {
                 <option value={5}>5</option>
               </select>
             </label>
-            <button type="button" className="btn" onClick={() => void handleExportWav()}>
+            <button
+              type="button"
+              className="btn"
+              disabled={usesMicModulator(state)}
+              title={
+                usesMicModulator(state)
+                  ? 'WAV export requires tone modulator (live mic not supported in v3.0)'
+                  : undefined
+              }
+              onClick={() => void handleExportWav()}
+            >
               Export WAV
             </button>
+            {exportError && <span className="export-error">{exportError}</span>}
             <button type="button" className="btn" onClick={() => void handleScreenshot()}>
               Screenshot
             </button>
@@ -571,6 +776,7 @@ function Slider({
   max,
   step = 1,
   value,
+  disabled,
   onChange
 }: {
   label: string
@@ -578,10 +784,11 @@ function Slider({
   max: number
   step?: number
   value: number
+  disabled?: boolean
   onChange: (v: number) => void
 }) {
   return (
-    <label className="slider">
+    <label className={`slider${disabled ? ' slider--disabled' : ''}`}>
       <span>
         {label}: <strong>{step < 1 ? value.toFixed(2) : Math.round(value)}</strong>
       </span>
@@ -591,6 +798,7 @@ function Slider({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </label>

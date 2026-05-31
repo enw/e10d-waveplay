@@ -1,0 +1,15 @@
+{
+  "id": "ssb-mic-usb",
+  "name": "USB — hear yourself single-sideband",
+  "mode": "ssb",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "sideband": "usb",
+    "amplitude": 0.5,
+    "carrierPilot": false,
+    "modulatorSource": "mic",
+    "micGain": 1
+  },
+  "rfAnalogy": "SSB with your voice — one sideband, no carrier. Half the AM bandwidth on HF."
+}

@@ -1,46 +1,44 @@
 import { describe, expect, it } from 'vitest'
-import { clampFreq, clampModIndex, getVizHints } from './types'
+import { clampMicGain, defaultSignalState, getVizHints, usesMicModulator } from './types'
 import { encodeWav } from '../export/wav'
 
 describe('types', () => {
-  it('clamps frequency', () => {
-    expect(clampFreq(10)).toBe(20)
-    expect(clampFreq(5000)).toBe(4000)
+  it('clamps mic gain', () => {
+    expect(clampMicGain(3)).toBe(2)
+    expect(clampMicGain(-1)).toBe(0)
   })
 
-  it('clamps modulation index', () => {
-    expect(clampModIndex(1.5)).toBe(1)
-    expect(clampModIndex(-0.1)).toBe(0)
+  it('detects mic modulator', () => {
+    const state = defaultSignalState()
+    expect(usesMicModulator(state)).toBe(false)
+    expect(
+      usesMicModulator({
+        ...state,
+        mode: 'am',
+        am: { ...state.am, modulatorSource: 'mic' }
+      })
+    ).toBe(true)
   })
 
   it('returns AM spectrum labels', () => {
+    const base = defaultSignalState()
     const hints = getVizHints({
+      ...base,
       mode: 'am',
-      basic: { waveShape: 'sine', frequencyHz: 1000, amplitude: 0.5 },
-      am: { carrierHz: 1000, modulatorHz: 100, modulationIndex: 1 },
-      fm: { carrierHz: 440, modulatorHz: 5, deviationHz: 25 },
-      mix: { oscAHz: 1000, oscAAmp: 0.5, oscBHz: 1005, oscBAmp: 0.5, mixMode: 'sum' },
-      cw: { carrierHz: 800, gateHz: 5, amplitude: 0.5 },
-      ssb: { carrierHz: 1000, modulatorHz: 100, sideband: 'usb', amplitude: 0.5, carrierPilot: false },
-      volume: 0.5,
-      playing: false
+      am: { ...base.am, carrierHz: 1000, modulatorHz: 100, modulationIndex: 1 }
     })
     expect(hints.spectrumLabels?.map((l) => l.label)).toEqual(['LSB', 'carrier', 'USB'])
   })
 
-  it('returns SSB spectrum labels without pilot', () => {
+  it('returns mic AM hint', () => {
+    const base = defaultSignalState()
     const hints = getVizHints({
-      mode: 'ssb',
-      basic: { waveShape: 'sine', frequencyHz: 1000, amplitude: 0.5 },
-      am: { carrierHz: 1000, modulatorHz: 100, modulationIndex: 1 },
-      fm: { carrierHz: 440, modulatorHz: 5, deviationHz: 25 },
-      mix: { oscAHz: 1000, oscAAmp: 0.5, oscBHz: 1005, oscBAmp: 0.5, mixMode: 'sum' },
-      cw: { carrierHz: 800, gateHz: 5, amplitude: 0.5 },
-      ssb: { carrierHz: 1000, modulatorHz: 100, sideband: 'usb', amplitude: 0.5, carrierPilot: false },
-      volume: 0.5,
-      playing: false
+      ...base,
+      mode: 'am',
+      am: { ...base.am, modulatorSource: 'mic' }
     })
-    expect(hints.spectrumLabels?.map((l) => l.label)).toEqual(['USB'])
+    expect(hints.envelope?.micLive).toBe(true)
+    expect(hints.rfHint).toContain('voice')
   })
 })
 

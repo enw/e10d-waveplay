@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
-import type { VizHints } from '../audio/types'
+import type { FilterParams, VizHints } from '../audio/types'
+import { computeBandpassResponse } from '../audio/filterResponse'
 import { SpectrumRenderer } from '../viz/SpectrumRenderer'
 import {
   defaultSpectrumView,
@@ -19,6 +20,7 @@ export interface SpectrumProps {
   canvasId?: string
   view: SpectrumView
   onViewChange: (view: SpectrumView) => void
+  filterOverlay?: FilterParams
 }
 
 function Spectrum({
@@ -28,7 +30,8 @@ function Spectrum({
   sampleRate,
   canvasId = 'waveplay-spectrum',
   view,
-  onViewChange
+  onViewChange,
+  filterOverlay
 }: SpectrumProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -37,6 +40,21 @@ function Spectrum({
   const viewRef = useRef(view)
   const draggingRef = useRef(false)
   const lastDragXRef = useRef(0)
+
+  const filterResponseRef = useRef<Float32Array | undefined>(undefined)
+
+  useEffect(() => {
+    if (filterOverlay?.enabled) {
+      filterResponseRef.current = computeBandpassResponse(
+        filterOverlay.centerHz,
+        filterOverlay.bandwidthHz,
+        sampleRate,
+        analyser.frequencyBinCount
+      )
+    } else {
+      filterResponseRef.current = undefined
+    }
+  }, [filterOverlay, sampleRate, analyser])
 
   viewRef.current = view
 
@@ -88,7 +106,16 @@ function Spectrum({
         const currentView = viewRef.current
         if (renderer) {
           if (active) {
-            renderer.render(ctx, width, height, analyser, sampleRate, labels, currentView)
+            renderer.render(
+              ctx,
+              width,
+              height,
+              analyser,
+              sampleRate,
+              labels,
+              currentView,
+              filterResponseRef.current
+            )
           } else {
             renderer.renderIdle(ctx, width, height, currentView)
           }
@@ -99,7 +126,7 @@ function Spectrum({
 
     rafId = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(rafId)
-  }, [active, analyser, labels, sampleRate, view])
+  }, [active, analyser, labels, sampleRate, view, filterOverlay])
 
   const handleWheel = useCallback(
     (event: WheelEvent) => {

@@ -6,10 +6,11 @@ export interface ScopeProps {
   analyser: AnalyserNode
   active: boolean
   envelope?: VizHints['envelope']
+  micAnalyser?: AnalyserNode | null
   canvasId?: string
 }
 
-function Scope({ analyser, active, envelope, canvasId = 'waveplay-scope' }: ScopeProps) {
+function Scope({ analyser, active, envelope, micAnalyser, canvasId = 'waveplay-scope' }: ScopeProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rendererRef = useRef<ScopeRenderer | null>(null)
@@ -68,7 +69,8 @@ function Scope({ analyser, active, envelope, canvasId = 'waveplay-scope' }: Scop
               height,
               analyser,
               analyser.context.sampleRate,
-              envelope
+              envelope,
+              micAnalyser ?? undefined
             )
           } else {
             renderer.renderIdle(ctx, width, height)
@@ -80,7 +82,7 @@ function Scope({ analyser, active, envelope, canvasId = 'waveplay-scope' }: Scop
 
     rafId = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(rafId)
-  }, [active, analyser, envelope])
+  }, [active, analyser, envelope, micAnalyser])
 
   return (
     <div ref={hostRef} className="viz-canvas-host">

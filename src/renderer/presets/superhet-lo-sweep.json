@@ -1,0 +1,14 @@
+{
+  "id": "superhet-lo-sweep",
+  "name": "Superhet — LO offset lesson",
+  "mode": "superhet",
+  "params": {
+    "rfCarrierHz": 1000,
+    "rfModHz": 100,
+    "modulationIndex": 0.8,
+    "loHz": 1050,
+    "ifCenterHz": 50,
+    "ifBandwidthHz": 200
+  },
+  "rfAnalogy": "Changing LO moves the mixer products — enable sweep on LO and watch IF walk on the waterfall."
+}

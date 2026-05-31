@@ -1,0 +1,14 @@
+{
+  "id": "superhet-if-narrow",
+  "name": "Superhet — IF too narrow",
+  "mode": "superhet",
+  "params": {
+    "rfCarrierHz": 1000,
+    "rfModHz": 100,
+    "modulationIndex": 1,
+    "loHz": 1200,
+    "ifCenterHz": 200,
+    "ifBandwidthHz": 80
+  },
+  "rfAnalogy": "A mistuned or too-narrow IF strips the demodulated audio — click Mixer vs Demod on the diagram."
+}

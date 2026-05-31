@@ -1,0 +1,16 @@
+{
+  "id": "filter-narrow-muffled",
+  "name": "AM muffled — filter too narrow",
+  "mode": "am",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "modulationIndex": 1
+  },
+  "filter": {
+    "enabled": true,
+    "centerHz": 1000,
+    "bandwidthHz": 400
+  },
+  "rfAnalogy": "A filter narrower than your sideband spacing removes intelligence — hear the muffling."
+}

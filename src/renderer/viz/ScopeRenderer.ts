@@ -21,7 +21,8 @@ export class ScopeRenderer {
     height: number,
     analyser: AnalyserNode,
     sampleRate: number,
-    envelope?: EnvelopeHint
+    envelope?: EnvelopeHint,
+    micAnalyser?: AnalyserNode
   ): void {
     analyser.getFloatTimeDomainData(this.buffer)
 
@@ -33,7 +34,9 @@ export class ScopeRenderer {
     const midY = height / 2
     const ampScale = height * 0.42
 
-    if (envelope) {
+    if (envelope?.micLive && micAnalyser) {
+      this.drawMicEnvelope(ctx, width, midY, ampScale, micAnalyser, envelope.max)
+    } else if (envelope) {
       this.drawEnvelope(ctx, width, midY, ampScale, sampleRate, this.buffer.length, envelope)
     }
 
@@ -132,6 +135,43 @@ export class ScopeRenderer {
       ctx.stroke()
     }
 
+    ctx.restore()
+  }
+
+  private drawMicEnvelope(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    midY: number,
+    ampScale: number,
+    micAnalyser: AnalyserNode,
+    scale: number
+  ): void {
+    const micBuf = new Float32Array(micAnalyser.fftSize)
+    micAnalyser.getFloatTimeDomainData(micBuf)
+
+    ctx.save()
+    ctx.strokeStyle = ENVELOPE
+    ctx.lineWidth = 1.5
+    ctx.setLineDash([6, 4])
+    ctx.globalAlpha = 0.85
+
+    const len = micBuf.length
+    const step = len / width
+
+    const drawLine = (sign: number): void => {
+      ctx.beginPath()
+      for (let x = 0; x <= width; x++) {
+        const idx = Math.min(len - 1, Math.floor(x * step))
+        const amp = Math.abs(micBuf[idx] ?? 0) * scale * sign
+        const y = midY - amp * ampScale
+        if (x === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      }
+      ctx.stroke()
+    }
+
+    drawLine(1)
+    drawLine(-1)
     ctx.restore()
   }
 

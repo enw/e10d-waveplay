@@ -1,0 +1,13 @@
+{
+  "id": "am-mic-voice",
+  "name": "AM — your voice on 1 kHz",
+  "mode": "am",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "modulationIndex": 0.8,
+    "modulatorSource": "mic",
+    "micGain": 1
+  },
+  "rfAnalogy": "You are the baseband. Speak and watch your formants become sidebands around the 1 kHz carrier."
+}

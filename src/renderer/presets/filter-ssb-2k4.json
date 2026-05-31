@@ -1,0 +1,18 @@
+{
+  "id": "filter-ssb-2k4",
+  "name": "SSB with 2.4 kHz IF filter",
+  "mode": "ssb",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "sideband": "usb",
+    "amplitude": 0.5,
+    "carrierPilot": false
+  },
+  "filter": {
+    "enabled": true,
+    "centerHz": 1100,
+    "bandwidthHz": 2400
+  },
+  "rfAnalogy": "455 kHz IF filter — here at audio Hz. SSB fits a narrow passband; AM needs more width."
+}

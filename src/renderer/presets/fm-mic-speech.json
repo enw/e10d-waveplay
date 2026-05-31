@@ -1,0 +1,13 @@
+{
+  "id": "fm-mic-speech",
+  "name": "FM — speech on 440 Hz",
+  "mode": "fm",
+  "params": {
+    "carrierHz": 440,
+    "modulatorHz": 5,
+    "deviationHz": 100,
+    "modulatorSource": "mic",
+    "micGain": 1
+  },
+  "rfAnalogy": "Your voice drives FM deviation — louder syllables push energy farther from the carrier."
+}

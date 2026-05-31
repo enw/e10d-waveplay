@@ -1,14 +1,42 @@
-import type { AmParams, BasicParams, CwParams, FmParams, MixParams, SignalMode, SignalState, SsbParams, WaveShape } from './types'
-import { clampAmp, clampFreq, clampModIndex } from './types'
+import type {
+  AmParams,
+  BasicParams,
+  CwParams,
+  FmParams,
+  MixParams,
+  SignalMode,
+  SignalState,
+  SsbParams,
+  SuperhetParams,
+  SuperhetStage,
+  WaveShape
+} from './types'
+import {
+  clampAmp,
+  clampFreq,
+  clampMicGain,
+  clampModIndex,
+  stateNeedsMic
+} from './types'
+import { MicInput } from './MicInput'
+import { createHilbertSplit } from './hilbert'
+import { connectFilterStage, updateFilterNode } from './FilterStage'
+import { buildSuperhetChain } from './SuperhetChain'
 
 type Disposer = () => void
 
 export class SignalGraph {
   readonly context: AudioContext
   readonly analyser: AnalyserNode
+  readonly micInput = new MicInput()
+
   private masterGain: GainNode
   private disposeGraph: Disposer | null = null
   private _playing = false
+  private superhetStage: SuperhetStage = 'audio'
+  private superhetStages: Record<SuperhetStage, AudioNode> | null = null
+  private liveFilter: BiquadFilterNode | null = null
+  private vizTapNode: AudioNode | null = null
 
   constructor() {
     this.context = new AudioContext()
@@ -17,8 +45,7 @@ export class SignalGraph {
     this.analyser.smoothingTimeConstant = 0.75
     this.masterGain = this.context.createGain()
     this.masterGain.gain.value = 0.5
-    this.masterGain.connect(this.analyser)
-    this.analyser.connect(this.context.destination)
+    this.masterGain.connect(this.context.destination)
   }
 
   get playing(): boolean {
@@ -31,8 +58,24 @@ export class SignalGraph {
     }
   }
 
+  async prepare(state: SignalState): Promise<void> {
+    if (stateNeedsMic(state)) {
+      await this.micInput.acquire(this.context)
+      const gain =
+        state.mode === 'am'
+          ? state.am.micGain
+          : state.mode === 'fm'
+            ? state.fm.micGain
+            : state.ssb.micGain
+      this.micInput.setGain(clampMicGain(gain))
+    } else {
+      this.micInput.release()
+    }
+  }
+
   async start(state: SignalState): Promise<void> {
     await this.ensureRunning()
+    await this.prepare(state)
     this.rebuild(state)
     this._playing = true
   }
@@ -40,6 +83,10 @@ export class SignalGraph {
   stop(): void {
     this.disposeGraph?.()
     this.disposeGraph = null
+    this.superhetStages = null
+    this.liveFilter = null
+    this.vizTapNode = null
+    this.micInput.release()
     this._playing = false
   }
 
@@ -47,64 +94,128 @@ export class SignalGraph {
     this.masterGain.gain.setTargetAtTime(clampAmp(v), this.context.currentTime, 0.01)
   }
 
+  setSuperhetStage(stage: SuperhetStage): void {
+    this.superhetStage = stage
+    if (this.superhetStages) {
+      this.setAnalyserTap(this.superhetStages[stage])
+    }
+  }
+
   rebuild(state: SignalState): void {
     this.disposeGraph?.()
+    this.superhetStages = null
+    this.liveFilter = null
     this.disposeGraph = this.buildGraph(state)
     if (state.volume !== undefined) {
       this.setVolume(state.volume)
     }
   }
 
-  updateParams(state: SignalState): void {
+  async updateParams(state: SignalState): Promise<void> {
     if (!this._playing) return
-    this.rebuild(state)
+    await this.prepare(state)
+    if (state.mode === 'superhet' && this.liveFilter && state.filter.enabled) {
+      updateFilterNode(this.liveFilter, {
+        enabled: true,
+        centerHz: state.superhet.ifCenterHz,
+        bandwidthHz: state.superhet.ifBandwidthHz
+      })
+    } else if (this.liveFilter && state.filter.enabled) {
+      updateFilterNode(this.liveFilter, state.filter)
+    } else {
+      this.rebuild(state)
+    }
+  }
+
+  scheduleSweepParam(paramKey: string, value: number, state: SignalState): void {
+    const t = this.context.currentTime
+    if (paramKey === 'am.modulationIndex' && state.mode === 'am') {
+      this.rebuild({ ...state, am: { ...state.am, modulationIndex: value } })
+    } else if (paramKey === 'fm.deviationHz' && state.mode === 'fm') {
+      this.rebuild({ ...state, fm: { ...state.fm, deviationHz: value } })
+    } else if (paramKey === 'mix.oscBHz' && state.mode === 'mix') {
+      this.rebuild({ ...state, mix: { ...state.mix, oscBHz: value } })
+    } else if (paramKey === 'filter.bandwidthHz') {
+      if (this.liveFilter) {
+        updateFilterNode(this.liveFilter, { ...state.filter, bandwidthHz: value })
+      } else {
+        this.rebuild(applySweepState(state, paramKey, value))
+      }
+    } else {
+      this.rebuild(applySweepState(state, paramKey, value))
+    }
+    void t
+  }
+
+  private setAnalyserTap(node: AudioNode): void {
+    this.vizTapNode?.disconnect(this.analyser)
+    node.connect(this.analyser)
+    this.vizTapNode = node
+  }
+
+  private connectOutput(source: AudioNode, state: SignalState): Disposer {
+    if (state.mode === 'superhet') {
+      source.connect(this.masterGain)
+      return () => source.disconnect(this.masterGain)
+    }
+
+    const filter = connectFilterStage(this.context, state.filter)
+    this.liveFilter = filter.filter
+    source.connect(filter.input)
+    filter.output.connect(this.masterGain)
+    this.setAnalyserTap(filter.output)
+
+    return () => {
+      filter.dispose()
+      this.liveFilter = null
+    }
   }
 
   private buildGraph(state: SignalState): Disposer {
     switch (state.mode) {
       case 'basic':
-        return this.buildBasic(state.basic)
+        return this.buildBasic(state.basic, state)
       case 'am':
-        return this.buildAm(state.am)
+        return this.buildAm(state.am, state)
       case 'fm':
-        return this.buildFm(state.fm)
+        return this.buildFm(state.fm, state)
       case 'mix':
-        return this.buildMix(state.mix)
+        return this.buildMix(state.mix, state)
       case 'cw':
-        return this.buildCw(state.cw)
+        return this.buildCw(state.cw, state)
       case 'ssb':
-        return this.buildSsb(state.ssb)
+        return this.buildSsb(state.ssb, state)
+      case 'superhet':
+        return this.buildSuperhet(state.superhet, state)
     }
   }
 
-  private buildBasic(params: BasicParams): Disposer {
+  private buildBasic(params: BasicParams, state: SignalState): Disposer {
     const osc = this.context.createOscillator()
     osc.type = params.waveShape
     osc.frequency.value = clampFreq(params.frequencyHz)
     const gain = this.context.createGain()
     gain.gain.value = clampAmp(params.amplitude)
     osc.connect(gain)
-    gain.connect(this.masterGain)
+    const outDispose = this.connectOutput(gain, state)
     osc.start()
     return () => {
       osc.stop()
       osc.disconnect()
       gain.disconnect()
+      outDispose()
     }
   }
 
-  private buildAm(params: AmParams): Disposer {
+  private buildAm(params: AmParams, state: SignalState): Disposer {
     const carrierHz = clampFreq(params.carrierHz)
     const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
     const m = clampModIndex(params.modulationIndex)
+    const useMic = params.modulatorSource === 'mic'
 
     const carrier = this.context.createOscillator()
     carrier.type = 'sine'
     carrier.frequency.value = carrierHz
-
-    const modulator = this.context.createOscillator()
-    modulator.type = 'sine'
-    modulator.frequency.value = modulatorHz
 
     const modGain = this.context.createGain()
     modGain.gain.value = m
@@ -115,66 +226,93 @@ export class SignalGraph {
     const ampGain = this.context.createGain()
     ampGain.gain.value = 0.5 * (1 + m)
 
-    modulator.connect(modGain)
+    const disposers: Disposer[] = []
+
+    if (useMic) {
+      const mod = this.micInput.modulatorOut
+      if (mod) mod.connect(modGain)
+    } else {
+      const modulator = this.context.createOscillator()
+      modulator.type = 'sine'
+      modulator.frequency.value = modulatorHz
+      modulator.connect(modGain)
+      modulator.start()
+      disposers.push(() => {
+        modulator.stop()
+        modulator.disconnect()
+      })
+    }
+
     modGain.connect(ampGain.gain)
     offset.connect(ampGain.gain)
     carrier.connect(ampGain)
-    ampGain.connect(this.masterGain)
+    const outDispose = this.connectOutput(ampGain, state)
 
     carrier.start()
-    modulator.start()
     offset.start()
 
     return () => {
       carrier.stop()
-      modulator.stop()
       offset.stop()
       carrier.disconnect()
-      modulator.disconnect()
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
+      disposers.forEach((d) => d())
+      outDispose()
     }
   }
 
-  private buildFm(params: FmParams): Disposer {
+  private buildFm(params: FmParams, state: SignalState): Disposer {
     const carrierHz = clampFreq(params.carrierHz)
     const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
     const deviationHz = Math.min(500, Math.max(0, params.deviationHz))
+    const useMic = params.modulatorSource === 'mic'
 
     const carrier = this.context.createOscillator()
     carrier.type = 'sine'
     carrier.frequency.value = carrierHz
 
-    const modulator = this.context.createOscillator()
-    modulator.type = 'sine'
-    modulator.frequency.value = modulatorHz
-
     const devGain = this.context.createGain()
-    devGain.gain.value = deviationHz
+    devGain.gain.value = useMic ? deviationHz * 2 : deviationHz
 
     const outGain = this.context.createGain()
     outGain.gain.value = 0.5
 
-    modulator.connect(devGain)
+    const disposers: Disposer[] = []
+
+    if (useMic) {
+      const mod = this.micInput.modulatorOut
+      if (mod) mod.connect(devGain)
+    } else {
+      const modulator = this.context.createOscillator()
+      modulator.type = 'sine'
+      modulator.frequency.value = modulatorHz
+      modulator.connect(devGain)
+      modulator.start()
+      disposers.push(() => {
+        modulator.stop()
+        modulator.disconnect()
+      })
+    }
+
     devGain.connect(carrier.frequency)
     carrier.connect(outGain)
-    outGain.connect(this.masterGain)
+    const outDispose = this.connectOutput(outGain, state)
 
     carrier.start()
-    modulator.start()
 
     return () => {
       carrier.stop()
-      modulator.stop()
       carrier.disconnect()
-      modulator.disconnect()
       devGain.disconnect()
       outGain.disconnect()
+      disposers.forEach((d) => d())
+      outDispose()
     }
   }
 
-  private buildMix(params: MixParams): Disposer {
+  private buildMix(params: MixParams, state: SignalState): Disposer {
     const oscA = this.context.createOscillator()
     oscA.type = 'sine'
     oscA.frequency.value = clampFreq(params.oscAHz)
@@ -192,30 +330,25 @@ export class SignalGraph {
     oscA.connect(gainA)
     oscB.connect(gainB)
 
+    let outDispose: Disposer
+
     if (params.mixMode === 'sum') {
-      gainA.connect(this.masterGain)
-      gainB.connect(this.masterGain)
+      const sumGain = this.context.createGain()
+      sumGain.gain.value = 1
+      gainA.connect(sumGain)
+      gainB.connect(sumGain)
+      outDispose = this.connectOutput(sumGain, state)
     } else {
       const productGain = this.context.createGain()
       productGain.gain.value = 0
       gainA.connect(productGain)
       gainB.connect(productGain.gain)
-      productGain.connect(this.masterGain)
-      oscA.start()
-      oscB.start()
-      return () => {
-        oscA.stop()
-        oscB.stop()
-        oscA.disconnect()
-        oscB.disconnect()
-        gainA.disconnect()
-        gainB.disconnect()
-        productGain.disconnect()
-      }
+      outDispose = this.connectOutput(productGain, state)
     }
 
     oscA.start()
     oscB.start()
+
     return () => {
       oscA.stop()
       oscB.stop()
@@ -223,10 +356,11 @@ export class SignalGraph {
       oscB.disconnect()
       gainA.disconnect()
       gainB.disconnect()
+      outDispose()
     }
   }
 
-  private buildCw(params: CwParams): Disposer {
+  private buildCw(params: CwParams, state: SignalState): Disposer {
     const carrierHz = clampFreq(params.carrierHz)
     const gateHz = clampFreq(params.gateHz, 0.5, 20)
     const amp = clampAmp(params.amplitude)
@@ -251,7 +385,7 @@ export class SignalGraph {
     modGain.connect(ampGain.gain)
     offset.connect(ampGain.gain)
     carrier.connect(ampGain)
-    ampGain.connect(this.masterGain)
+    const outDispose = this.connectOutput(ampGain, state)
 
     carrier.start()
     gate.start()
@@ -266,26 +400,67 @@ export class SignalGraph {
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
+      outDispose()
     }
   }
 
-  private buildSsb(params: SsbParams): Disposer {
+  private buildSsb(params: SsbParams, state: SignalState): Disposer {
     const carrierHz = clampFreq(params.carrierHz)
     const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
     const amp = clampAmp(params.amplitude)
-    const sideFreq =
-      params.sideband === 'usb' ? carrierHz + modulatorHz : carrierHz - modulatorHz
+    const useMic = params.modulatorSource === 'mic'
 
-    const sideOsc = this.context.createOscillator()
-    sideOsc.type = 'sine'
-    sideOsc.frequency.value = clampFreq(sideFreq)
+    const hilbert = createHilbertSplit(this.context)
+    const disposers: Disposer[] = []
 
-    const sideGain = this.context.createGain()
-    sideGain.gain.value = amp
+    if (useMic) {
+      const mod = this.micInput.modulatorOut
+      if (mod) mod.connect(hilbert.input)
+    } else {
+      const voice = this.context.createOscillator()
+      voice.type = 'sine'
+      voice.frequency.value = modulatorHz
+      voice.connect(hilbert.input)
+      voice.start()
+      disposers.push(() => {
+        voice.stop()
+        voice.disconnect()
+      })
+    }
 
-    sideOsc.connect(sideGain)
-    sideGain.connect(this.masterGain)
-    sideOsc.start()
+    const cosOsc = this.context.createOscillator()
+    cosOsc.type = 'sine'
+    cosOsc.frequency.value = carrierHz
+
+    const sinDelay = this.context.createDelay(1)
+    sinDelay.delayTime.value = Math.min(1 / (4 * carrierHz), 0.05)
+
+    const cosGain = this.context.createGain()
+    cosGain.gain.value = 0
+    const sinGain = this.context.createGain()
+    sinGain.gain.value = 0
+
+    hilbert.i.connect(cosGain)
+    cosOsc.connect(cosGain.gain)
+
+    hilbert.q.connect(sinGain)
+    cosOsc.connect(sinDelay)
+    sinDelay.connect(sinGain.gain)
+
+    const sign = params.sideband === 'usb' ? -1 : 1
+    const qScale = this.context.createGain()
+    qScale.gain.value = sign
+
+    const sum = this.context.createGain()
+    sum.gain.value = amp * 0.5
+
+    cosGain.connect(sum)
+    sinGain.connect(qScale)
+    qScale.connect(sum)
+
+    const outDispose = this.connectOutput(sum, state)
+
+    cosOsc.start()
 
     let pilotOsc: OscillatorNode | null = null
     let pilotGain: GainNode | null = null
@@ -302,18 +477,51 @@ export class SignalGraph {
     }
 
     return () => {
-      sideOsc.stop()
-      sideOsc.disconnect()
-      sideGain.disconnect()
+      cosOsc.stop()
+      cosOsc.disconnect()
+      sinDelay.disconnect()
+      cosGain.disconnect()
+      sinGain.disconnect()
+      qScale.disconnect()
+      sum.disconnect()
+      hilbert.dispose()
+      disposers.forEach((d) => d())
       pilotOsc?.stop()
       pilotOsc?.disconnect()
       pilotGain?.disconnect()
+      outDispose()
     }
   }
+
+  private buildSuperhet(params: SuperhetParams, state: SignalState): Disposer {
+    const chain = buildSuperhetChain(this.context, params)
+    this.superhetStages = chain.stages
+    this.liveFilter = null
+
+    chain.stages.audio.connect(this.masterGain)
+    this.setAnalyserTap(chain.stages[this.superhetStage])
+
+    return () => {
+      chain.dispose()
+      chain.stages.audio.disconnect(this.masterGain)
+      this.superhetStages = null
+    }
+  }
+}
+
+function applySweepState(state: SignalState, paramKey: string, value: number): SignalState {
+  const [section, field] = paramKey.split('.')
+  if (!section || !field) return state
+  if (section === 'filter') {
+    return { ...state, filter: { ...state.filter, [field]: value } }
+  }
+  const block = state[section as keyof SignalState]
+  if (typeof block !== 'object' || block === null) return state
+  return { ...state, [section]: { ...block, [field]: value } } as SignalState
 }
 
 export function shapeLabel(shape: WaveShape): string {
   return shape.charAt(0).toUpperCase() + shape.slice(1)
 }
 
-export type { SignalMode, SignalState }
+export type { SignalMode, SignalState, SuperhetStage }

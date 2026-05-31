@@ -1,0 +1,16 @@
+{
+  "id": "filter-wide-am",
+  "name": "AM with wide 6 kHz filter",
+  "mode": "am",
+  "params": {
+    "carrierHz": 1000,
+    "modulatorHz": 100,
+    "modulationIndex": 0.8
+  },
+  "filter": {
+    "enabled": true,
+    "centerHz": 1000,
+    "bandwidthHz": 6000
+  },
+  "rfAnalogy": "Broadcast AM channels are wide — a broad IF passes carrier and both sidebands cleanly."
+}

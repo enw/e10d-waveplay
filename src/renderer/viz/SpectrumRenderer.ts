@@ -28,7 +28,8 @@ export class SpectrumRenderer {
     analyser: AnalyserNode,
     sampleRate: number,
     labels: SpectrumLabel[] | undefined,
-    view: SpectrumView
+    view: SpectrumView,
+    filterResponse?: Float32Array
   ): void {
     analyser.getFloatFrequencyData(this.buffer)
 
@@ -46,6 +47,10 @@ export class SpectrumRenderer {
       if (this.buffer[i] > peakDb) peakDb = this.buffer[i]
     }
     if (!Number.isFinite(peakDb)) peakDb = 0
+
+    if (filterResponse) {
+      this.drawFilterOverlay(ctx, width, height, filterResponse, binWidth, view)
+    }
 
     this.drawSpectrum(ctx, width, height, binWidth, startBin, endBin, peakDb, view)
 
@@ -126,6 +131,41 @@ export class SpectrumRenderer {
   private dbToY(relativeDb: number, height: number): number {
     const clamped = Math.max(-DB_RANGE, Math.min(0, relativeDb))
     return height - ((clamped + DB_RANGE) / DB_RANGE) * height
+  }
+
+  private drawFilterOverlay(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    response: Float32Array,
+    binWidth: number,
+    view: SpectrumView
+  ): void {
+    ctx.save()
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.12)'
+    ctx.strokeStyle = 'rgba(251, 191, 36, 0.45)'
+    ctx.lineWidth = 1
+
+    ctx.beginPath()
+    let started = false
+    for (let i = 0; i < response.length; i++) {
+      const freq = i * binWidth
+      if (freq < view.minHz || freq > view.maxHz) continue
+      const x = freqToX(freq, width, view)
+      const y = height - response[i] * height * 0.85
+      if (!started) {
+        ctx.moveTo(x, y)
+        started = true
+      } else {
+        ctx.lineTo(x, y)
+      }
+    }
+    ctx.lineTo(width, height)
+    ctx.lineTo(0, height)
+    ctx.closePath()
+    ctx.fill()
+    ctx.stroke()
+    ctx.restore()
   }
 
   private drawSpectrum(

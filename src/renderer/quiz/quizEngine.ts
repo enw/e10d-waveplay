@@ -1,4 +1,5 @@
 import type { SignalMode, SignalState } from '@/audio/types'
+import { mergePresetParams } from '@/audio/types'
 import type { Preset } from '@/presets'
 import { PRESETS } from '@/presets'
 
@@ -48,7 +49,7 @@ export function applyPresetToState(state: SignalState, preset: Preset): SignalSt
   return {
     ...state,
     mode: preset.mode,
-    [preset.mode]: preset.params
+    [preset.mode]: mergePresetParams(preset.mode, preset.params)
   } as SignalState
 }
 

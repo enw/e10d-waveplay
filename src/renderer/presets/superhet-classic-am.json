@@ -1,0 +1,14 @@
+{
+  "id": "superhet-classic-am",
+  "name": "Classic AM superhet",
+  "mode": "superhet",
+  "params": {
+    "rfCarrierHz": 1000,
+    "rfModHz": 100,
+    "modulationIndex": 0.8,
+    "loHz": 1200,
+    "ifCenterHz": 200,
+    "ifBandwidthHz": 400
+  },
+  "rfAnalogy": "RF AM at 1 kHz mixes with LO at 1.2 kHz → IF at 200 Hz → demod recovers 100 Hz audio."
+}

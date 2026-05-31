@@ -5,11 +5,29 @@ import type {
   FmParams,
   MixParams,
   SignalState,
-  SsbParams
+  SsbParams,
+  SuperhetParams
 } from '../audio/types'
-import { clampAmp, clampFreq, clampModIndex } from '../audio/types'
+import { clampAmp, clampFreq, clampModIndex, usesMicModulator } from '../audio/types'
+import { connectFilterStage } from '../audio/FilterStage'
+import { buildSuperhetChain } from '../audio/SuperhetChain'
 import { EXPORT_SAMPLE_RATE, type ExportScreenshotMeta } from './types'
 import { encodeWav } from './wav'
+
+function connectToMaster(
+  ctx: OfflineAudioContext,
+  state: SignalState,
+  node: AudioNode,
+  masterGain: GainNode
+): void {
+  if (state.mode !== 'superhet' && state.filter.enabled) {
+    const filter = connectFilterStage(ctx, state.filter)
+    node.connect(filter.input)
+    filter.output.connect(masterGain)
+    return
+  }
+  node.connect(masterGain)
+}
 
 function buildOfflineGraph(ctx: OfflineAudioContext, state: SignalState): void {
   const masterGain = ctx.createGain()
@@ -18,22 +36,25 @@ function buildOfflineGraph(ctx: OfflineAudioContext, state: SignalState): void {
 
   switch (state.mode) {
     case 'basic':
-      buildBasicOffline(ctx, state.basic, masterGain)
+      buildBasicOffline(ctx, state.basic, state, masterGain)
       break
     case 'am':
-      buildAmOffline(ctx, state.am, masterGain)
+      buildAmOffline(ctx, state.am, state, masterGain)
       break
     case 'fm':
-      buildFmOffline(ctx, state.fm, masterGain)
+      buildFmOffline(ctx, state.fm, state, masterGain)
       break
     case 'mix':
-      buildMixOffline(ctx, state.mix, masterGain)
+      buildMixOffline(ctx, state.mix, state, masterGain)
       break
     case 'cw':
-      buildCwOffline(ctx, state.cw, masterGain)
+      buildCwOffline(ctx, state.cw, state, masterGain)
       break
     case 'ssb':
-      buildSsbOffline(ctx, state.ssb, masterGain)
+      buildSsbOffline(ctx, state.ssb, state, masterGain)
+      break
+    case 'superhet':
+      buildSuperhetOffline(ctx, state.superhet, masterGain)
       break
   }
 }
@@ -41,6 +62,7 @@ function buildOfflineGraph(ctx: OfflineAudioContext, state: SignalState): void {
 function buildBasicOffline(
   ctx: OfflineAudioContext,
   params: BasicParams,
+  state: SignalState,
   masterGain: GainNode
 ): void {
   const osc = ctx.createOscillator()
@@ -49,11 +71,16 @@ function buildBasicOffline(
   const gain = ctx.createGain()
   gain.gain.value = clampAmp(params.amplitude)
   osc.connect(gain)
-  gain.connect(masterGain)
+  connectToMaster(ctx, state, gain, masterGain)
   osc.start(0)
 }
 
-function buildAmOffline(ctx: OfflineAudioContext, params: AmParams, masterGain: GainNode): void {
+function buildAmOffline(
+  ctx: OfflineAudioContext,
+  params: AmParams,
+  state: SignalState,
+  masterGain: GainNode
+): void {
   const carrierHz = clampFreq(params.carrierHz)
   const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
   const m = clampModIndex(params.modulationIndex)
@@ -79,14 +106,19 @@ function buildAmOffline(ctx: OfflineAudioContext, params: AmParams, masterGain: 
   modGain.connect(ampGain.gain)
   offset.connect(ampGain.gain)
   carrier.connect(ampGain)
-  ampGain.connect(masterGain)
+  connectToMaster(ctx, state, ampGain, masterGain)
 
   carrier.start(0)
   modulator.start(0)
   offset.start(0)
 }
 
-function buildFmOffline(ctx: OfflineAudioContext, params: FmParams, masterGain: GainNode): void {
+function buildFmOffline(
+  ctx: OfflineAudioContext,
+  params: FmParams,
+  state: SignalState,
+  masterGain: GainNode
+): void {
   const carrierHz = clampFreq(params.carrierHz)
   const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
   const deviationHz = Math.min(500, Math.max(0, params.deviationHz))
@@ -108,13 +140,18 @@ function buildFmOffline(ctx: OfflineAudioContext, params: FmParams, masterGain: 
   modulator.connect(devGain)
   devGain.connect(carrier.frequency)
   carrier.connect(outGain)
-  outGain.connect(masterGain)
+  connectToMaster(ctx, state, outGain, masterGain)
 
   carrier.start(0)
   modulator.start(0)
 }
 
-function buildMixOffline(ctx: OfflineAudioContext, params: MixParams, masterGain: GainNode): void {
+function buildMixOffline(
+  ctx: OfflineAudioContext,
+  params: MixParams,
+  state: SignalState,
+  masterGain: GainNode
+): void {
   const oscA = ctx.createOscillator()
   oscA.type = 'sine'
   oscA.frequency.value = clampFreq(params.oscAHz)
@@ -133,21 +170,28 @@ function buildMixOffline(ctx: OfflineAudioContext, params: MixParams, masterGain
   oscB.connect(gainB)
 
   if (params.mixMode === 'sum') {
-    gainA.connect(masterGain)
-    gainB.connect(masterGain)
+    const sumGain = ctx.createGain()
+    gainA.connect(sumGain)
+    gainB.connect(sumGain)
+    connectToMaster(ctx, state, sumGain, masterGain)
   } else {
     const productGain = ctx.createGain()
     productGain.gain.value = 0
     gainA.connect(productGain)
     gainB.connect(productGain.gain)
-    productGain.connect(masterGain)
+    connectToMaster(ctx, state, productGain, masterGain)
   }
 
   oscA.start(0)
   oscB.start(0)
 }
 
-function buildCwOffline(ctx: OfflineAudioContext, params: CwParams, masterGain: GainNode): void {
+function buildCwOffline(
+  ctx: OfflineAudioContext,
+  params: CwParams,
+  state: SignalState,
+  masterGain: GainNode
+): void {
   const carrierHz = clampFreq(params.carrierHz)
   const gateHz = clampFreq(params.gateHz, 0.5, 20)
   const amp = clampAmp(params.amplitude)
@@ -172,14 +216,19 @@ function buildCwOffline(ctx: OfflineAudioContext, params: CwParams, masterGain: 
   modGain.connect(ampGain.gain)
   offset.connect(ampGain.gain)
   carrier.connect(ampGain)
-  ampGain.connect(masterGain)
+  connectToMaster(ctx, state, ampGain, masterGain)
 
   carrier.start(0)
   gate.start(0)
   offset.start(0)
 }
 
-function buildSsbOffline(ctx: OfflineAudioContext, params: SsbParams, masterGain: GainNode): void {
+function buildSsbOffline(
+  ctx: OfflineAudioContext,
+  params: SsbParams,
+  state: SignalState,
+  masterGain: GainNode
+): void {
   const carrierHz = clampFreq(params.carrierHz)
   const modulatorHz = clampFreq(params.modulatorHz, 1, 500)
   const amp = clampAmp(params.amplitude)
@@ -192,7 +241,7 @@ function buildSsbOffline(ctx: OfflineAudioContext, params: SsbParams, masterGain
   const sideGain = ctx.createGain()
   sideGain.gain.value = amp
   sideOsc.connect(sideGain)
-  sideGain.connect(masterGain)
+  connectToMaster(ctx, state, sideGain, masterGain)
   sideOsc.start(0)
 
   if (params.carrierPilot) {
@@ -205,6 +254,15 @@ function buildSsbOffline(ctx: OfflineAudioContext, params: SsbParams, masterGain
     pilotGain.connect(masterGain)
     pilot.start(0)
   }
+}
+
+function buildSuperhetOffline(
+  ctx: OfflineAudioContext,
+  params: SuperhetParams,
+  masterGain: GainNode
+): void {
+  const chain = buildSuperhetChain(ctx, params)
+  chain.stages.audio.connect(masterGain)
 }
 
 function compositeScreenshot(
@@ -282,7 +340,10 @@ export async function renderOffline(
 export async function exportWav(
   state: SignalState,
   durationSec: number
-): Promise<{ ok: boolean; filePath?: string }> {
+): Promise<{ ok: boolean; filePath?: string; error?: string }> {
+  if (usesMicModulator(state)) {
+    return { ok: false, error: 'WAV export requires tone modulator (live mic not supported)' }
+  }
   const samples = await renderOffline(state, durationSec)
   const wavBuffer = encodeWav(samples, EXPORT_SAMPLE_RATE)
   return window.electronAPI.saveFile({
