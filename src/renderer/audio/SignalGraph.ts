@@ -103,8 +103,10 @@ export class SignalGraph {
 
   rebuild(state: SignalState): void {
     this.disposeGraph?.()
+    this.disposeGraph = null
     this.superhetStages = null
     this.liveFilter = null
+    this.vizTapNode = null
     this.disposeGraph = this.buildGraph(state)
     if (state.volume !== undefined) {
       this.setVolume(state.volume)
@@ -148,7 +150,13 @@ export class SignalGraph {
   }
 
   private setAnalyserTap(node: AudioNode): void {
-    this.vizTapNode?.disconnect(this.analyser)
+    if (this.vizTapNode) {
+      try {
+        this.vizTapNode.disconnect(this.analyser)
+      } catch {
+        // Previous tap was disposed during rebuild.
+      }
+    }
     node.connect(this.analyser)
     this.vizTapNode = node
   }

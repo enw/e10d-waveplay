@@ -1,5 +1,5 @@
 import type { SpectrumView } from './spectrumView'
-import { formatViewRange, freqToX, viewSpan } from './spectrumView'
+import { formatViewRange, viewSpan } from './spectrumView'
 
 const BG = '#0c0c12'
 const DB_RANGE = 60
@@ -14,22 +14,22 @@ function heatColor(v: number): string {
 
 export class WaterfallRenderer {
   private readonly fftBuffer: Float32Array
-  private readonly historyWidth: number
+  private readonly historyHeight: number
   private history: Uint8Array
-  private writeCol = 0
+  private writeRow = 0
 
-  constructor(analyser: AnalyserNode, historyWidth = 320) {
+  constructor(analyser: AnalyserNode, historyHeight = 320) {
     this.fftBuffer = new Float32Array(analyser.frequencyBinCount)
-    this.historyWidth = historyWidth
-    this.history = new Uint8Array(historyWidth * analyser.frequencyBinCount)
+    this.historyHeight = historyHeight
+    this.history = new Uint8Array(historyHeight * analyser.frequencyBinCount)
   }
 
   reset(): void {
     this.history.fill(0)
-    this.writeCol = 0
+    this.writeRow = 0
   }
 
-  pushColumn(analyser: AnalyserNode, sampleRate: number, view: SpectrumView): void {
+  pushRow(analyser: AnalyserNode, sampleRate: number, view: SpectrumView): void {
     analyser.getFloatFrequencyData(this.fftBuffer)
     const binWidth = sampleRate / analyser.fftSize
     const startBin = Math.max(0, Math.floor(view.minHz / binWidth))
@@ -41,15 +41,15 @@ export class WaterfallRenderer {
     }
     if (!Number.isFinite(peakDb)) peakDb = 0
 
-    const colOffset = this.writeCol * this.fftBuffer.length
+    const rowOffset = this.writeRow * this.fftBuffer.length
     for (let i = 0; i < this.fftBuffer.length; i++) {
       const relativeDb = this.fftBuffer[i] - peakDb
       const clamped = Math.max(-DB_RANGE, Math.min(0, relativeDb))
       const norm = (clamped + DB_RANGE) / DB_RANGE
-      this.history[colOffset + i] = Math.floor(norm * 255)
+      this.history[rowOffset + i] = Math.floor(norm * 255)
     }
 
-    this.writeCol = (this.writeCol + 1) % this.historyWidth
+    this.writeRow = (this.writeRow + 1) % this.historyHeight
   }
 
   render(
@@ -64,22 +64,21 @@ export class WaterfallRenderer {
     ctx.fillRect(0, 0, width, height)
 
     const binWidth = sampleRate / fftSize
-    const span = viewSpan(view)
     const startBin = Math.max(0, Math.floor(view.minHz / binWidth))
     const endBin = Math.min(this.fftBuffer.length - 1, Math.ceil(view.maxHz / binWidth))
     const binsInView = Math.max(1, endBin - startBin + 1)
 
-    const colW = width / this.historyWidth
-    const rowH = height / binsInView
+    const colW = width / binsInView
+    const rowH = height / this.historyHeight
 
-    for (let col = 0; col < this.historyWidth; col++) {
-      const age = (this.writeCol - 1 - col + this.historyWidth) % this.historyWidth
-      const histCol = (this.writeCol - 1 - age + this.historyWidth) % this.historyWidth
-      const x = width - (col + 1) * colW
+    for (let screenRow = 0; screenRow < this.historyHeight; screenRow++) {
+      const age = this.historyHeight - 1 - screenRow
+      const histRow = (this.writeRow - 1 - age + this.historyHeight) % this.historyHeight
+      const y = screenRow * rowH
 
       for (let b = startBin; b <= endBin; b++) {
-        const v = this.history[histCol * this.fftBuffer.length + b]
-        const y = height - (b - startBin + 1) * rowH
+        const v = this.history[histRow * this.fftBuffer.length + b]
+        const x = (b - startBin) * colW
         ctx.fillStyle = heatColor(v)
         ctx.fillRect(x, y, Math.ceil(colW) + 1, Math.ceil(rowH) + 1)
       }

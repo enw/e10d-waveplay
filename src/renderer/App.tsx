@@ -85,6 +85,8 @@ export default function App() {
 
   useEffect(() => {
     if (!state.playing) return
+    // Sweep drives audio via scheduleSweepParam; avoid duplicate rebuilds.
+    if (sweepConfig.enabled) return
     void graph.updateParams(state).catch((err: unknown) => {
       setMicError(err instanceof Error ? err.message : 'Microphone error')
     })
@@ -99,7 +101,8 @@ export default function App() {
     state.ssb,
     state.superhet,
     state.filter,
-    state.playing
+    state.playing,
+    sweepConfig.enabled
   ])
 
   useEffect(() => {

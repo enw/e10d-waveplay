@@ -82,7 +82,7 @@ function Waterfall({
         if (activeRef.current) {
           const now = performance.now()
           if (now - lastPush > 33) {
-            renderer.pushColumn(analyser, sampleRate, currentView)
+            renderer.pushRow(analyser, sampleRate, currentView)
             lastPush = now
           }
           renderer.render(ctx, width, height, sampleRate, analyser.fftSize, currentView)
