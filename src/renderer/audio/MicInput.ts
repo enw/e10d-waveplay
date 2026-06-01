@@ -1,3 +1,5 @@
+import { safeDisconnect } from './safeDisconnect'
+
 export class MicInput {
   private stream: MediaStream | null = null
   private source: MediaStreamAudioSourceNode | null = null
@@ -24,6 +26,10 @@ export class MicInput {
   }
 
   async acquire(ctx: AudioContext): Promise<void> {
+    if (this.active && this.gainNode) {
+      return
+    }
+
     this.release()
     this._error = null
 
@@ -74,10 +80,10 @@ export class MicInput {
   release(): void {
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
-    this.source?.disconnect()
-    this.highpass?.disconnect()
-    this.gainNode?.disconnect()
-    this._levelAnalyser?.disconnect()
+    if (this.source) safeDisconnect(this.source)
+    if (this.highpass) safeDisconnect(this.highpass)
+    if (this.gainNode) safeDisconnect(this.gainNode)
+    if (this._levelAnalyser) safeDisconnect(this._levelAnalyser)
     this.source = null
     this.highpass = null
     this.gainNode = null

@@ -23,6 +23,7 @@ import { createHilbertSplit } from './hilbert'
 import { connectFilterStage, updateFilterNode } from './FilterStage'
 import { buildSuperhetChain } from './SuperhetChain'
 import { connectNoiseStage, noiseActive, resolveNoise, updateNoiseStage, type NoiseStage } from './NoiseStage'
+import { safeDisconnect } from './safeDisconnect'
 
 type Disposer = () => void
 
@@ -78,18 +79,12 @@ export class SignalGraph {
 
   async start(state: SignalState): Promise<void> {
     await this.ensureRunning()
-    await this.prepare(state)
-    this.rebuild(state)
+    await this.rebuildAsync(state)
     this._playing = true
   }
 
   stop(): void {
-    this.disposeGraph?.()
-    this.disposeGraph = null
-    this.superhetStages = null
-    this.liveFilter = null
-    this.liveNoise = null
-    this.vizTapNode = null
+    this.teardownGraph()
     this.micInput.release()
     this._playing = false
   }
@@ -106,12 +101,25 @@ export class SignalGraph {
   }
 
   rebuild(state: SignalState): void {
+    this.teardownGraph()
+    this.disposeGraph = this.buildGraph(state)
+    if (state.volume !== undefined) {
+      this.setVolume(state.volume)
+    }
+  }
+
+  private teardownGraph(): void {
     this.disposeGraph?.()
     this.disposeGraph = null
     this.superhetStages = null
     this.liveFilter = null
     this.liveNoise = null
     this.vizTapNode = null
+  }
+
+  private async rebuildAsync(state: SignalState): Promise<void> {
+    this.teardownGraph()
+    await this.prepare(state)
     this.disposeGraph = this.buildGraph(state)
     if (state.volume !== undefined) {
       this.setVolume(state.volume)
@@ -121,7 +129,6 @@ export class SignalGraph {
   async updateParams(state: SignalState): Promise<void> {
     if (!this._playing) return
     await this.ensureRunning()
-    await this.prepare(state)
 
     const wantsNoise = noiseActive(resolveNoise(state))
     const hasNoise = this.liveNoise !== null
@@ -131,19 +138,20 @@ export class SignalGraph {
     }
 
     if (wantsNoise !== hasNoise) {
-      this.rebuild(state)
+      await this.rebuildAsync(state)
       return
     }
 
     if (state.mode === 'superhet') {
-      this.rebuild(state)
+      await this.rebuildAsync(state)
       return
     }
 
     if (this.liveFilter && state.filter.enabled) {
       updateFilterNode(this.liveFilter, state.filter)
+      await this.prepare(state)
     } else {
-      this.rebuild(state)
+      await this.rebuildAsync(state)
     }
   }
 
@@ -169,11 +177,7 @@ export class SignalGraph {
 
   private setAnalyserTap(node: AudioNode): void {
     if (this.vizTapNode) {
-      try {
-        this.vizTapNode.disconnect(this.analyser)
-      } catch {
-        // Previous tap was disposed during rebuild.
-      }
+      safeDisconnect(this.vizTapNode, this.analyser)
     }
     node.connect(this.analyser)
     this.vizTapNode = node
@@ -190,7 +194,7 @@ export class SignalGraph {
       source.connect(noise.input)
       signalOut = noise.output
       noiseDispose = () => {
-        source.disconnect(noise.input)
+        safeDisconnect(source, noise.input)
         noise.dispose()
         this.liveNoise = null
       }
@@ -241,9 +245,9 @@ export class SignalGraph {
     osc.start()
     return () => {
       osc.stop()
+      outDispose()
       osc.disconnect()
       gain.disconnect()
-      outDispose()
     }
   }
 
@@ -270,7 +274,10 @@ export class SignalGraph {
 
     if (useMic) {
       const mod = this.micInput.modulatorOut
-      if (mod) mod.connect(modGain)
+      if (mod) {
+        mod.connect(modGain)
+        disposers.push(() => safeDisconnect(mod, modGain))
+      }
     } else {
       const modulator = this.context.createOscillator()
       modulator.type = 'sine'
@@ -294,12 +301,12 @@ export class SignalGraph {
     return () => {
       carrier.stop()
       offset.stop()
+      outDispose()
+      disposers.forEach((d) => d())
       carrier.disconnect()
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
-      disposers.forEach((d) => d())
-      outDispose()
     }
   }
 
@@ -323,7 +330,10 @@ export class SignalGraph {
 
     if (useMic) {
       const mod = this.micInput.modulatorOut
-      if (mod) mod.connect(devGain)
+      if (mod) {
+        mod.connect(devGain)
+        disposers.push(() => safeDisconnect(mod, devGain))
+      }
     } else {
       const modulator = this.context.createOscillator()
       modulator.type = 'sine'
@@ -344,11 +354,11 @@ export class SignalGraph {
 
     return () => {
       carrier.stop()
+      outDispose()
+      disposers.forEach((d) => d())
       carrier.disconnect()
       devGain.disconnect()
       outGain.disconnect()
-      disposers.forEach((d) => d())
-      outDispose()
     }
   }
 
@@ -392,11 +402,11 @@ export class SignalGraph {
     return () => {
       oscA.stop()
       oscB.stop()
+      outDispose()
       oscA.disconnect()
       oscB.disconnect()
       gainA.disconnect()
       gainB.disconnect()
-      outDispose()
     }
   }
 
@@ -435,12 +445,12 @@ export class SignalGraph {
       carrier.stop()
       gate.stop()
       offset.stop()
+      outDispose()
       carrier.disconnect()
       gate.disconnect()
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
-      outDispose()
     }
   }
 
@@ -455,7 +465,10 @@ export class SignalGraph {
 
     if (useMic) {
       const mod = this.micInput.modulatorOut
-      if (mod) mod.connect(hilbert.input)
+      if (mod) {
+        mod.connect(hilbert.input)
+        disposers.push(() => safeDisconnect(mod, hilbert.input))
+      }
     } else {
       const voice = this.context.createOscillator()
       voice.type = 'sine'
@@ -518,6 +531,8 @@ export class SignalGraph {
 
     return () => {
       cosOsc.stop()
+      outDispose()
+      disposers.forEach((d) => d())
       cosOsc.disconnect()
       sinDelay.disconnect()
       cosGain.disconnect()
@@ -525,11 +540,9 @@ export class SignalGraph {
       qScale.disconnect()
       sum.disconnect()
       hilbert.dispose()
-      disposers.forEach((d) => d())
       pilotOsc?.stop()
       pilotOsc?.disconnect()
       pilotGain?.disconnect()
-      outDispose()
     }
   }
 
@@ -548,7 +561,7 @@ export class SignalGraph {
       chain.stages.audio.connect(noise.input)
       tail = noise.output
       noiseDispose = () => {
-        chain.stages.audio.disconnect(noise.input)
+        safeDisconnect(chain.stages.audio, noise.input)
         noise.dispose()
         this.liveNoise = null
       }
@@ -560,9 +573,9 @@ export class SignalGraph {
     this.setAnalyserTap(chain.stages[this.superhetStage])
 
     return () => {
-      chain.dispose()
-      tail.disconnect(this.masterGain)
       noiseDispose()
+      safeDisconnect(tail, this.masterGain)
+      chain.dispose()
       this.superhetStages = null
     }
   }

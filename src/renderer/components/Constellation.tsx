@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { SignalState } from '../audio/types'
 import { computePhasorModel } from '../viz/phasorModel'
 import { ConstellationRenderer } from '../viz/ConstellationRenderer'
@@ -15,31 +15,52 @@ function Constellation({ state, active, canvasId = 'waveplay-constellation' }: C
   const rendererRef = useRef(new ConstellationRenderer())
   const sizeRef = useRef({ width: 0, height: 0 })
   const phaseRef = useRef(0)
+  const activeRef = useRef(active)
+  const modelRef = useRef(computePhasorModel(state))
 
-  const model = useMemo(() => computePhasorModel(state), [state])
+  const model = useMemo(
+    () => computePhasorModel(state),
+    [state.mode, state.am, state.fm, state.mix, state.ssb]
+  )
 
-  useEffect(() => {
+  activeRef.current = active
+  modelRef.current = model
+
+  const measure = useCallback((): void => {
     const host = hostRef.current
     const canvas = canvasRef.current
     if (!host || !canvas) return
 
-    const resize = (): void => {
-      const rect = host.getBoundingClientRect()
-      const dpr = window.devicePixelRatio || 1
-      const width = Math.max(1, Math.floor(rect.width))
-      const height = Math.max(1, Math.floor(rect.height))
-      canvas.width = Math.floor(width * dpr)
-      canvas.height = Math.floor(height * dpr)
-      canvas.style.width = `${width}px`
-      canvas.style.height = `${height}px`
-      sizeRef.current = { width, height }
-    }
+    const rect = host.getBoundingClientRect()
+    const dpr = window.devicePixelRatio || 1
+    const width = Math.max(1, Math.floor(rect.width))
+    const height = Math.max(1, Math.floor(rect.height))
 
-    const ro = new ResizeObserver(resize)
-    ro.observe(host)
-    resize()
-    return () => ro.disconnect()
+    if (sizeRef.current.width === width && sizeRef.current.height === height) return
+
+    canvas.width = Math.floor(width * dpr)
+    canvas.height = Math.floor(height * dpr)
+    canvas.style.width = `${width}px`
+    canvas.style.height = `${height}px`
+    sizeRef.current = { width, height }
   }, [])
+
+  useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+
+    const ro = new ResizeObserver(measure)
+    ro.observe(host)
+    measure()
+    return () => ro.disconnect()
+  }, [measure])
+
+  useEffect(() => {
+    measure()
+    if (active) {
+      phaseRef.current = 0
+    }
+  }, [active, model, measure])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -54,25 +75,34 @@ function Constellation({ state, active, canvasId = 'waveplay-constellation' }: C
     const draw = (now: number): void => {
       const dt = (now - last) / 1000
       last = now
-      if (active && model.supported) {
+
+      const isActive = activeRef.current
+      const currentModel = modelRef.current
+
+      if (sizeRef.current.width <= 1 || sizeRef.current.height <= 1) {
+        measure()
+      }
+
+      if (isActive && currentModel.supported) {
         phaseRef.current = (phaseRef.current + dt * 0.4) % 1
       }
 
       const { width, height } = sizeRef.current
       if (width > 0 && height > 0) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-        if (active) {
-          rendererRef.current.render(ctx, width, height, model, phaseRef.current)
+        if (isActive) {
+          rendererRef.current.render(ctx, width, height, currentModel, phaseRef.current)
         } else {
           rendererRef.current.renderIdle(ctx, width, height)
         }
       }
+
       rafId = requestAnimationFrame(draw)
     }
 
     rafId = requestAnimationFrame(draw)
     return () => cancelAnimationFrame(rafId)
-  }, [active, model])
+  }, [measure])
 
   return (
     <div ref={hostRef} className="viz-canvas-host">
