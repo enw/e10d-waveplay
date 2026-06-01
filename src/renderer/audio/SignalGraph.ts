@@ -22,6 +22,7 @@ import { MicInput } from './MicInput'
 import { createHilbertSplit } from './hilbert'
 import { connectFilterStage, updateFilterNode } from './FilterStage'
 import { buildSuperhetChain } from './SuperhetChain'
+import { connectNoiseStage, noiseActive, resolveNoise, updateNoiseStage, type NoiseStage } from './NoiseStage'
 
 type Disposer = () => void
 
@@ -36,6 +37,7 @@ export class SignalGraph {
   private superhetStage: SuperhetStage = 'audio'
   private superhetStages: Record<SuperhetStage, AudioNode> | null = null
   private liveFilter: BiquadFilterNode | null = null
+  private liveNoise: NoiseStage | null = null
   private vizTapNode: AudioNode | null = null
 
   constructor() {
@@ -45,7 +47,8 @@ export class SignalGraph {
     this.analyser.smoothingTimeConstant = 0.75
     this.masterGain = this.context.createGain()
     this.masterGain.gain.value = 0.5
-    this.masterGain.connect(this.context.destination)
+    this.masterGain.connect(this.analyser)
+    this.analyser.connect(this.context.destination)
   }
 
   get playing(): boolean {
@@ -85,6 +88,7 @@ export class SignalGraph {
     this.disposeGraph = null
     this.superhetStages = null
     this.liveFilter = null
+    this.liveNoise = null
     this.vizTapNode = null
     this.micInput.release()
     this._playing = false
@@ -106,6 +110,7 @@ export class SignalGraph {
     this.disposeGraph = null
     this.superhetStages = null
     this.liveFilter = null
+    this.liveNoise = null
     this.vizTapNode = null
     this.disposeGraph = this.buildGraph(state)
     if (state.volume !== undefined) {
@@ -115,14 +120,27 @@ export class SignalGraph {
 
   async updateParams(state: SignalState): Promise<void> {
     if (!this._playing) return
+    await this.ensureRunning()
     await this.prepare(state)
-    if (state.mode === 'superhet' && this.liveFilter && state.filter.enabled) {
-      updateFilterNode(this.liveFilter, {
-        enabled: true,
-        centerHz: state.superhet.ifCenterHz,
-        bandwidthHz: state.superhet.ifBandwidthHz
-      })
-    } else if (this.liveFilter && state.filter.enabled) {
+
+    const wantsNoise = noiseActive(resolveNoise(state))
+    const hasNoise = this.liveNoise !== null
+
+    if (this.liveNoise) {
+      updateNoiseStage(this.liveNoise, state.noise, state)
+    }
+
+    if (wantsNoise !== hasNoise) {
+      this.rebuild(state)
+      return
+    }
+
+    if (state.mode === 'superhet') {
+      this.rebuild(state)
+      return
+    }
+
+    if (this.liveFilter && state.filter.enabled) {
       updateFilterNode(this.liveFilter, state.filter)
     } else {
       this.rebuild(state)
@@ -162,18 +180,32 @@ export class SignalGraph {
   }
 
   private connectOutput(source: AudioNode, state: SignalState): Disposer {
-    if (state.mode === 'superhet') {
-      source.connect(this.masterGain)
-      return () => source.disconnect(this.masterGain)
+    const wantsNoise = noiseActive(resolveNoise(state))
+    let signalOut: AudioNode = source
+    let noiseDispose: Disposer = () => {}
+
+    if (wantsNoise) {
+      const noise = connectNoiseStage(this.context, state)
+      this.liveNoise = noise
+      source.connect(noise.input)
+      signalOut = noise.output
+      noiseDispose = () => {
+        source.disconnect(noise.input)
+        noise.dispose()
+        this.liveNoise = null
+      }
+    } else {
+      this.liveNoise = null
     }
 
     const filter = connectFilterStage(this.context, state.filter)
     this.liveFilter = filter.filter
-    source.connect(filter.input)
+    signalOut.connect(filter.input)
     filter.output.connect(this.masterGain)
     this.setAnalyserTap(filter.output)
 
     return () => {
+      noiseDispose()
       filter.dispose()
       this.liveFilter = null
     }
@@ -506,12 +538,31 @@ export class SignalGraph {
     this.superhetStages = chain.stages
     this.liveFilter = null
 
-    chain.stages.audio.connect(this.masterGain)
+    const wantsNoise = noiseActive(resolveNoise(state))
+    let tail: AudioNode = chain.stages.audio
+    let noiseDispose: Disposer = () => {}
+
+    if (wantsNoise) {
+      const noise = connectNoiseStage(this.context, state)
+      this.liveNoise = noise
+      chain.stages.audio.connect(noise.input)
+      tail = noise.output
+      noiseDispose = () => {
+        chain.stages.audio.disconnect(noise.input)
+        noise.dispose()
+        this.liveNoise = null
+      }
+    } else {
+      this.liveNoise = null
+    }
+
+    tail.connect(this.masterGain)
     this.setAnalyserTap(chain.stages[this.superhetStage])
 
     return () => {
       chain.dispose()
-      chain.stages.audio.disconnect(this.masterGain)
+      tail.disconnect(this.masterGain)
+      noiseDispose()
       this.superhetStages = null
     }
   }

@@ -58,6 +58,16 @@ export interface FilterParams {
   bandwidthHz: number
 }
 
+export interface NoiseParams {
+  awgnEnabled: boolean
+  snrDb: number
+  qrmEnabled: boolean
+  qrmOffsetHz: number
+  qrmLevel: number
+  humEnabled: boolean
+  humLevel: number
+}
+
 export interface SuperhetParams {
   rfCarrierHz: number
   rfModHz: number
@@ -77,6 +87,7 @@ export interface SignalState {
   ssb: SsbParams
   superhet: SuperhetParams
   filter: FilterParams
+  noise: NoiseParams
   volume: number
   playing: boolean
 }
@@ -147,6 +158,16 @@ export const DEFAULT_FILTER: FilterParams = {
   bandwidthHz: 2400
 }
 
+export const DEFAULT_NOISE: NoiseParams = {
+  awgnEnabled: false,
+  snrDb: 20,
+  qrmEnabled: false,
+  qrmOffsetHz: 200,
+  qrmLevel: 0.4,
+  humEnabled: false,
+  humLevel: 0.3
+}
+
 export const DEFAULT_SUPERHET: SuperhetParams = {
   rfCarrierHz: 1000,
   rfModHz: 100,
@@ -167,6 +188,7 @@ export function defaultSignalState(): SignalState {
     ssb: { ...DEFAULT_SSB },
     superhet: { ...DEFAULT_SUPERHET },
     filter: { ...DEFAULT_FILTER },
+    noise: { ...DEFAULT_NOISE },
     volume: 0.5,
     playing: false
   }
@@ -217,10 +239,24 @@ export function mergePresetParams(mode: SignalMode, params: object): SignalState
 }
 
 export function getVizHints(state: SignalState): VizHints {
+  const noiseHint =
+    state.noise &&
+    (state.noise.awgnEnabled || state.noise.qrmEnabled || state.noise.humEnabled)
+  const appendNoise = (hint: string): string => {
+    if (!noiseHint || !state.noise) return hint
+    const parts: string[] = []
+    if (state.noise.awgnEnabled) parts.push(`band noise ~${Math.round(state.noise.snrDb)} dB SNR`)
+    if (state.noise.qrmEnabled) parts.push(`QRM +${Math.round(state.noise.qrmOffsetHz)} Hz`)
+    if (state.noise.humEnabled) parts.push('60 Hz hum')
+    return `${hint} Noise lab: ${parts.join('; ')}.`
+  }
+
   switch (state.mode) {
     case 'basic':
       return {
-        rfHint: 'Pure tone — like an unmodulated carrier before you key the mic.',
+        rfHint: appendNoise(
+          'Pure tone — like an unmodulated carrier before you key the mic.'
+        ),
         spectrumLabels: [{ freq: state.basic.frequencyHz, label: 'tone' }],
         filterOverlay: state.filter.enabled ? state.filter : undefined
       }
@@ -229,9 +265,11 @@ export function getVizHints(state: SignalState): VizHints {
       const m = modulationIndex
       const mic = modulatorSource === 'mic'
       return {
-        rfHint: mic
-          ? 'Your voice modulates the carrier — speech formants become sidebands around fc.'
-          : 'At RF, fc is your transmit frequency; fm is baseband (voice/data).',
+        rfHint: appendNoise(
+          mic
+            ? 'Your voice modulates the carrier — speech formants become sidebands around fc.'
+            : 'At RF, fc is your transmit frequency; fm is baseband (voice/data).'
+        ),
         envelope: mic
           ? { min: 0, max: m, modulatorHz: 0, carrierHz, micLive: true }
           : {
@@ -254,9 +292,11 @@ export function getVizHints(state: SignalState): VizHints {
       const { carrierHz, modulatorHz, deviationHz, modulatorSource } = state.fm
       const mic = modulatorSource === 'mic'
       return {
-        rfHint: mic
-          ? 'Your voice drives FM deviation — louder speech pushes sidebands farther from fc.'
-          : 'Deviation at RF is in kHz; here we use Hz so you can hear the sidebands.',
+        rfHint: appendNoise(
+          mic
+            ? 'Your voice drives FM deviation — louder speech pushes sidebands farther from fc.'
+            : 'Deviation at RF is in kHz; here we use Hz so you can hear the sidebands.'
+        ),
         spectrumLabels: mic
           ? [{ freq: carrierHz, label: 'carrier' }]
           : [
@@ -283,7 +323,9 @@ export function getVizHints(state: SignalState): VizHints {
               { freq: sum, label: 'f1+f2' }
             ]
       return {
-        rfHint: 'Superheterodyne mixing: local oscillator + incoming signal → IF at the difference frequency.',
+        rfHint: appendNoise(
+          'Superheterodyne mixing: local oscillator + incoming signal → IF at the difference frequency.'
+        ),
         spectrumLabels: labels,
         filterOverlay: state.filter.enabled ? state.filter : undefined
       }
@@ -291,7 +333,9 @@ export function getVizHints(state: SignalState): VizHints {
     case 'cw': {
       const { carrierHz, gateHz } = state.cw
       return {
-        rfHint: 'CW keys the carrier on and off — no voice sidebands, just carrier present or absent.',
+        rfHint: appendNoise(
+          'CW keys the carrier on and off — no voice sidebands, just carrier present or absent.'
+        ),
         envelope: {
           min: 0,
           max: 1,
@@ -319,9 +363,11 @@ export function getVizHints(state: SignalState): VizHints {
         labels.push({ freq: carrierHz, label: 'pilot' })
       }
       return {
-        rfHint: mic
-          ? 'Your voice becomes a single sideband — half the bandwidth of AM on HF.'
-          : 'SSB sends one sideband — half the bandwidth of AM. Carrier suppressed saves transmit power on HF.',
+        rfHint: appendNoise(
+          mic
+            ? 'Your voice becomes a single sideband — half the bandwidth of AM on HF.'
+            : 'SSB sends one sideband — half the bandwidth of AM. Carrier suppressed saves transmit power on HF.'
+        ),
         spectrumLabels: labels,
         filterOverlay: state.filter.enabled ? state.filter : undefined
       }
@@ -330,8 +376,9 @@ export function getVizHints(state: SignalState): VizHints {
       const { rfCarrierHz, rfModHz, loHz, ifCenterHz } = state.superhet
       const ifPeak = ifCenterHz
       return {
-        rfHint:
-          'Superhet: RF signal mixes with LO → IF filter selects difference frequency → demod recovers audio.',
+        rfHint: appendNoise(
+          'Superhet: RF signal mixes with LO → IF filter selects difference frequency → demod recovers audio.'
+        ),
         spectrumLabels: [
           { freq: rfCarrierHz, label: 'RF' },
           { freq: loHz, label: 'LO' },

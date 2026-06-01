@@ -276,6 +276,134 @@ input[type='range'] {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.viz-row-4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
+.constellation-panel {
+  min-height: 240px;
+}
+
+.noise-panel {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  width: 100%;
+}
+
+.panel-heading {
+  width: 100%;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.lesson-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+}
+
+.lesson-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.lesson-title {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.lesson-progress {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.lesson-intro,
+.lesson-rf,
+.lesson-step,
+.lesson-hint,
+.lesson-wait,
+.lesson-done,
+.lesson-ok {
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.lesson-rf {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lesson-step {
+  font-size: 1rem;
+}
+
+.lesson-hint {
+  color: var(--accent2);
+  font-size: 0.85rem;
+}
+
+.lesson-wait {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.lesson-ok {
+  color: var(--accent);
+}
+
+.lesson-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lesson-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text);
+}
+
+.lesson-card:hover {
+  border-color: var(--accent);
+}
+
+.lesson-card span {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.lesson-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
 .waterfall-panel {
   min-height: 280px;
 }
@@ -351,8 +479,15 @@ input[type='range'] {
   line-height: 1.5;
 }
 
+@media (max-width: 1400px) {
+  .viz-row-4 {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 1100px) {
-  .viz-row-3 {
+  .viz-row-3,
+  .viz-row-4 {
     grid-template-columns: 1fr;
   }
 }

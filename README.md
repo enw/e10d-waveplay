@@ -30,6 +30,12 @@ Click **Play** to start the audio context, then try presets or tweak controls.
 - **IF bandpass filter** — overlay on any mode; ghost response on spectrum
 - **Superheterodyne chain** — RF → Mixer → IF → Demod block diagram with stage-selectable viz
 
+### v4 lab extensions
+
+- **Constellation / phasor view** — I/Q plane for AM, FM, SSB, and Mix
+- **Noise & QRM lab** — AWGN, adjacent-channel QRM, and 60 Hz hum
+- **Guided lessons** — checkpoint-based paths (sidebands, SSB vs AM, filters, superhet, noise)
+
 ## Scripts
 
 | Command | Description |

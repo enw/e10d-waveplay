@@ -19,11 +19,15 @@ import QuizPanel from '@/components/QuizPanel'
 import ModulatorSourcePanel from '@/components/ModulatorSourcePanel'
 import FilterPanel, { SuperhetIfPanel } from '@/components/FilterPanel'
 import SweepPanel, { defaultSweepConfig } from '@/components/SweepPanel'
-import SuperhetDiagram from '@/components/SuperhetDiagram'
+import LessonPanel, { initialLessonSession, type LessonSession } from '@/components/LessonPanel'
+import Constellation from '@/components/Constellation'
+import NoisePanel from '@/components/NoisePanel'
 import type { Preset } from '@/presets'
 import { exportScreenshot, exportWav } from '@/export/ExportService'
 import { defaultSpectrumView, type SpectrumView } from '@/viz/spectrumView'
 import type { SweepConfig } from '@/audio/SweepController'
+import SuperhetDiagram from '@/components/SuperhetDiagram'
+import { getLesson } from '@/lessons'
 import {
   advanceToGuess,
   applyPresetToState,
@@ -34,7 +38,7 @@ import {
   type QuizSession
 } from '@/quiz/quizEngine'
 
-type AppMode = 'study' | 'quiz'
+type AppMode = 'study' | 'quiz' | 'lessons'
 
 const MODES: { id: SignalMode; label: string }[] = [
   { id: 'basic', label: 'Basic' },
@@ -64,6 +68,7 @@ export default function App() {
   const [sweepConfig, setSweepConfig] = useState<SweepConfig>(() => defaultSweepConfig('basic'))
   const [micError, setMicError] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [lessonSession, setLessonSession] = useState<LessonSession>(initialLessonSession)
   const sweepRef = useRef(new SweepController())
   const stateRef = useRef(state)
 
@@ -101,6 +106,7 @@ export default function App() {
     state.ssb,
     state.superhet,
     state.filter,
+    state.noise,
     state.playing,
     sweepConfig.enabled
   ])
@@ -139,6 +145,26 @@ export default function App() {
   }
 
   useEffect(() => () => clearListenTimer(), [])
+
+  useEffect(() => {
+    if (appMode !== 'lessons' || !lessonSession.lessonId || lessonSession.completed) return
+    const lesson = getLesson(lessonSession.lessonId)
+    if (!lesson) return
+    const step = lesson.steps[lessonSession.stepIndex]
+    if (!step) return
+    const ok = step.validate(state, { superhetStage })
+    if (ok !== lessonSession.stepComplete) {
+      setLessonSession((s) => ({ ...s, stepComplete: ok }))
+    }
+  }, [
+    appMode,
+    lessonSession.lessonId,
+    lessonSession.stepIndex,
+    lessonSession.completed,
+    lessonSession.stepComplete,
+    state,
+    superhetStage
+  ])
 
   const togglePlay = useCallback(async () => {
     if (appMode === 'quiz' && quiz.phase === 'listen') return
@@ -250,7 +276,34 @@ export default function App() {
     graph.stop()
     setQuiz(initialQuizSession())
     setState((s) => ({ ...s, playing: false }))
+    setLessonSession(initialLessonSession())
     setAppMode('quiz')
+  }
+
+  const enterLessons = (): void => {
+    graph.stop()
+    setQuiz(initialQuizSession())
+    setState((s) => ({ ...s, playing: false }))
+    setLessonSession(initialLessonSession())
+    setAppMode('lessons')
+  }
+
+  const exitLessons = (): void => {
+    setLessonSession(initialLessonSession())
+    setAppMode('study')
+  }
+
+  const applyLessonState = (next: SignalState): void => {
+    setPresetId('')
+    setRfAnalogy('')
+    setState(next)
+    if (next.playing) {
+      void graph.start(next).catch((err: unknown) => {
+        setMicError(err instanceof Error ? err.message : 'Microphone error')
+      })
+    } else if (stateRef.current.playing) {
+      void graph.updateParams(next)
+    }
   }
 
   const paramsSummary = (): string => {
@@ -302,10 +355,18 @@ export default function App() {
               className={appMode === 'study' ? 'tab active' : 'tab'}
               onClick={() => {
                 if (appMode === 'quiz') exitQuiz()
+                if (appMode === 'lessons') exitLessons()
                 setAppMode('study')
               }}
             >
               Study
+            </button>
+            <button
+              type="button"
+              className={appMode === 'lessons' ? 'tab active' : 'tab'}
+              onClick={enterLessons}
+            >
+              Lessons
             </button>
             <button
               type="button"
@@ -321,7 +382,7 @@ export default function App() {
         </div>
       </header>
 
-      {state.mode === 'superhet' && appMode === 'study' && (
+      {state.mode === 'superhet' && (appMode === 'study' || appMode === 'lessons') && (
         <SuperhetDiagram
           stage={superhetStage}
           onStageChange={(stage) => {
@@ -331,7 +392,7 @@ export default function App() {
         />
       )}
 
-      <div className="viz-row viz-row-3">
+      <div className="viz-row viz-row-4">
         <div className="viz-panel">
           <div className="viz-label">Scope</div>
           <Scope
@@ -355,6 +416,10 @@ export default function App() {
             filterOverlay={hints.filterOverlay}
           />
         </div>
+        <div className="viz-panel constellation-panel">
+          <div className="viz-label">Constellation</div>
+          <Constellation state={state} active={state.playing} />
+        </div>
         <div className="viz-panel waterfall-panel">
           <div className="viz-label">Waterfall</div>
           <Waterfall
@@ -368,6 +433,15 @@ export default function App() {
 
       {appMode === 'study' ? (
         <div className="rf-panel">{displayHint}</div>
+      ) : appMode === 'lessons' ? (
+        <LessonPanel
+          session={lessonSession}
+          state={state}
+          superhetStage={superhetStage}
+          onSessionChange={setLessonSession}
+          onApplyState={applyLessonState}
+          onExit={exitLessons}
+        />
       ) : (
         <QuizPanel
           session={quiz}
@@ -378,7 +452,7 @@ export default function App() {
         />
       )}
 
-      {appMode === 'study' && (
+      {(appMode === 'study' || appMode === 'lessons') && (
         <>
           <div className="mode-tabs">
             {MODES.map((m) => (
@@ -715,6 +789,11 @@ export default function App() {
               mode={state.mode}
               state={state}
               onChange={(patch) => setState((s) => ({ ...s, filter: { ...s.filter, ...patch } }))}
+            />
+
+            <NoisePanel
+              noise={state.noise}
+              onChange={(patch) => setState((s) => ({ ...s, noise: { ...s.noise, ...patch } }))}
             />
 
             <SweepPanel
