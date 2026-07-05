@@ -59,6 +59,8 @@ export function carrierHzForQrm(state: SignalState): number {
       return state.mix.oscAHz
     case 'cw':
       return state.cw.carrierHz
+    case 'tonetext':
+      return state.tonetext.rootHz
     case 'ssb':
       return state.ssb.carrierHz
     case 'superhet':

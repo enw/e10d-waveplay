@@ -22,6 +22,7 @@ import SweepPanel, { defaultSweepConfig } from '@/components/SweepPanel'
 import LessonPanel, { initialLessonSession, type LessonSession } from '@/components/LessonPanel'
 import Constellation from '@/components/Constellation'
 import NoisePanel from '@/components/NoisePanel'
+import TonePanel from '@/components/TonePanel'
 import type { Preset } from '@/presets'
 import { exportScreenshot, exportWav } from '@/export/ExportService'
 import { defaultSpectrumView, type SpectrumView } from '@/viz/spectrumView'
@@ -46,6 +47,7 @@ const MODES: { id: SignalMode; label: string }[] = [
   { id: 'fm', label: 'FM' },
   { id: 'mix', label: 'Mix' },
   { id: 'cw', label: 'CW' },
+  { id: 'tonetext', label: 'ToneText' },
   { id: 'ssb', label: 'SSB' },
   { id: 'superhet', label: 'Superhet' }
 ]
@@ -103,6 +105,7 @@ export default function App() {
     state.fm,
     state.mix,
     state.cw,
+    state.tonetext,
     state.ssb,
     state.superhet,
     state.filter,
@@ -318,6 +321,8 @@ export default function App() {
         return `${state.mix.oscAHz}+${state.mix.oscBHz} Hz (${state.mix.mixMode})`
       case 'cw':
         return `fc=${state.cw.carrierHz} gate=${state.cw.gateHz} Hz`
+      case 'tonetext':
+        return `root=${state.tonetext.rootHz} Hz "${state.tonetext.text.slice(0, 24)}${state.tonetext.text.length > 24 ? '…' : ''}"`
       case 'ssb':
         return `${state.ssb.sideband.toUpperCase()} fc=${state.ssb.carrierHz} fm=${state.ssb.modulatorHz}${state.ssb.carrierPilot ? ' +pilot' : ''}${state.ssb.modulatorSource === 'mic' ? ' mic' : ''}`
       case 'superhet':
@@ -794,6 +799,13 @@ export default function App() {
             <NoisePanel
               noise={state.noise}
               onChange={(patch) => setState((s) => ({ ...s, noise: { ...s.noise, ...patch } }))}
+            />
+
+            <TonePanel
+              graph={graph}
+              state={state}
+              setState={setState}
+              onMicError={setMicError}
             />
 
             <SweepPanel

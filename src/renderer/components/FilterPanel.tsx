@@ -29,6 +29,9 @@ export default function FilterPanel({ filter, mode, state, onChange }: FilterPan
       case 'cw':
         center = state.cw.carrierHz
         break
+      case 'tonetext':
+        center = state.tonetext.rootHz
+        break
       default:
         break
     }

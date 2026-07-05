@@ -9,6 +9,7 @@ import type {
   SsbParams,
   SuperhetParams,
   SuperhetStage,
+  ToneTextParams,
   WaveShape
 } from './types'
 import {
@@ -24,6 +25,7 @@ import { connectFilterStage, updateFilterNode } from './FilterStage'
 import { buildSuperhetChain } from './SuperhetChain'
 import { connectNoiseStage, noiseActive, resolveNoise, updateNoiseStage, type NoiseStage } from './NoiseStage'
 import { safeDisconnect } from './safeDisconnect'
+import { buildFrame, scheduleLivePlayback } from '../codec'
 
 type Disposer = () => void
 
@@ -147,6 +149,11 @@ export class SignalGraph {
       return
     }
 
+    if (state.mode === 'tonetext') {
+      await this.rebuildAsync(state)
+      return
+    }
+
     if (this.liveFilter && state.filter.enabled) {
       updateFilterNode(this.liveFilter, state.filter)
       await this.prepare(state)
@@ -229,6 +236,8 @@ export class SignalGraph {
         return this.buildCw(state.cw, state)
       case 'ssb':
         return this.buildSsb(state.ssb, state)
+      case 'tonetext':
+        return this.buildTonetext(state.tonetext, state)
       case 'superhet':
         return this.buildSuperhet(state.superhet, state)
     }
@@ -451,6 +460,27 @@ export class SignalGraph {
       modGain.disconnect()
       offset.disconnect()
       ampGain.disconnect()
+    }
+  }
+
+  private buildTonetext(params: ToneTextParams, state: SignalState): Disposer {
+    const rootHz = clampFreq(params.rootHz, 80, 2000)
+    const amp = clampAmp(params.amplitude)
+    const plan = buildFrame(params.text, { rootHz, amplitude: amp })
+    const preGain = this.context.createGain()
+    preGain.gain.value = 1
+    const outDispose = this.connectOutput(preGain, state)
+    const stopScheduled = scheduleLivePlayback(
+      this.context,
+      plan,
+      preGain,
+      amp,
+      this.context.currentTime + 0.05
+    )
+    return () => {
+      stopScheduled()
+      outDispose()
+      preGain.disconnect()
     }
   }
 

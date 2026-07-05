@@ -1,5 +1,5 @@
 export type WaveShape = 'sine' | 'square' | 'triangle' | 'sawtooth'
-export type SignalMode = 'basic' | 'am' | 'fm' | 'mix' | 'cw' | 'ssb' | 'superhet'
+export type SignalMode = 'basic' | 'am' | 'fm' | 'mix' | 'cw' | 'ssb' | 'superhet' | 'tonetext'
 export type MixMode = 'sum' | 'product'
 export type EnvelopeShape = 'cos' | 'square'
 export type SsbSideband = 'usb' | 'lsb'
@@ -39,6 +39,12 @@ export interface MixParams {
 export interface CwParams {
   carrierHz: number
   gateHz: number
+  amplitude: number
+}
+
+export interface ToneTextParams {
+  text: string
+  rootHz: number
   amplitude: number
 }
 
@@ -84,6 +90,7 @@ export interface SignalState {
   fm: FmParams
   mix: MixParams
   cw: CwParams
+  tonetext: ToneTextParams
   ssb: SsbParams
   superhet: SuperhetParams
   filter: FilterParams
@@ -142,6 +149,12 @@ export const DEFAULT_CW: CwParams = {
   amplitude: 0.5
 }
 
+export const DEFAULT_TONETEXT: ToneTextParams = {
+  text: 'Hello world!',
+  rootHz: 220,
+  amplitude: 0.5
+}
+
 export const DEFAULT_SSB: SsbParams = {
   carrierHz: 1000,
   modulatorHz: 100,
@@ -185,6 +198,7 @@ export function defaultSignalState(): SignalState {
     fm: { ...DEFAULT_FM },
     mix: { ...DEFAULT_MIX },
     cw: { ...DEFAULT_CW },
+    tonetext: { ...DEFAULT_TONETEXT },
     ssb: { ...DEFAULT_SSB },
     superhet: { ...DEFAULT_SUPERHET },
     filter: { ...DEFAULT_FILTER },
@@ -231,6 +245,8 @@ export function mergePresetParams(mode: SignalMode, params: object): SignalState
       return { ...DEFAULT_MIX, ...params } as SignalState['mix']
     case 'cw':
       return { ...DEFAULT_CW, ...params } as SignalState['cw']
+    case 'tonetext':
+      return { ...DEFAULT_TONETEXT, ...params } as SignalState['tonetext']
     case 'ssb':
       return { ...DEFAULT_SSB, ...params } as SignalState['ssb']
     case 'superhet':
@@ -347,6 +363,19 @@ export function getVizHints(state: SignalState): VizHints {
           { freq: carrierHz, label: 'carrier' },
           { freq: carrierHz - gateHz, label: '−fg' },
           { freq: carrierHz + gateHz, label: '+fg' }
+        ],
+        filterOverlay: state.filter.enabled ? state.filter : undefined
+      }
+    }
+    case 'tonetext': {
+      const { rootHz } = state.tonetext
+      return {
+        rfHint: appendNoise(
+          'ToneText — each character as two minor-chord tones (nibble FSK). Sync preamble, payload melody, end marker.'
+        ),
+        spectrumLabels: [
+          { freq: rootHz, label: 'data' },
+          { freq: rootHz * 0.5, label: 'sync' }
         ],
         filterOverlay: state.filter.enabled ? state.filter : undefined
       }
