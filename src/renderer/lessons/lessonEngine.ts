@@ -2,6 +2,7 @@ import type { SignalMode, SignalState, SuperhetStage } from '../audio/types'
 
 export interface LessonContext {
   superhetStage?: SuperhetStage
+  tonetextDecoded?: string
 }
 
 export interface LessonStep {
@@ -15,6 +16,7 @@ export interface LessonStep {
     filter?: Partial<SignalState['filter']>
     superhet?: Partial<SignalState['superhet']>
     noise?: Partial<SignalState['noise']>
+    tonetext?: Partial<SignalState['tonetext']>
   }
   validate: (state: SignalState, ctx: LessonContext) => boolean
 }
@@ -78,6 +80,7 @@ export function applyStepState(state: SignalState, step: LessonStep): SignalStat
   if (patch.filter) next = { ...next, filter: { ...next.filter, ...patch.filter } }
   if (patch.superhet) next = { ...next, superhet: { ...next.superhet, ...patch.superhet } }
   if (patch.noise) next = { ...next, noise: { ...next.noise, ...patch.noise } }
+  if (patch.tonetext) next = { ...next, tonetext: { ...next.tonetext, ...patch.tonetext } }
   if (patch.mode) next = { ...next, mode: patch.mode }
   return next
 }

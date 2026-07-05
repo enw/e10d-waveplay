@@ -1,0 +1,11 @@
+{
+  "id": "tonetext-hello",
+  "name": "ToneText: Hello world!",
+  "mode": "tonetext",
+  "params": {
+    "text": "Hello world!",
+    "rootHz": 220,
+    "amplitude": 0.5
+  },
+  "rfAnalogy": "Digital modes on HF encode characters as audio tones — here each byte splits into two minor-chord nibbles with a sync preamble you can see on the waterfall."
+}

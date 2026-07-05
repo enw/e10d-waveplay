@@ -79,3 +79,10 @@ export function buildFrame(text: string, config: CodecConfig = DEFAULT_CODEC_CON
     text: payload
   }
 }
+
+export function frameDurationMs(
+  text: string,
+  config: CodecConfig = DEFAULT_CODEC_CONFIG
+): number {
+  return buildFrame(text, config).totalDurationSec * 1000
+}

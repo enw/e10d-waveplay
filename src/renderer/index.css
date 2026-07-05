@@ -336,10 +336,30 @@ input[type='range'] {
 }
 
 .tone-panel__status,
-.tone-panel__decoded {
+.tone-panel__decoded,
+.tone-panel__capturing {
   width: 100%;
   margin: 0;
   font-size: 0.9rem;
+}
+
+.tone-panel__capturing {
+  align-self: center;
+  color: var(--accent);
+}
+
+.tone-panel__countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 5rem;
+  font-weight: 700;
+  color: var(--accent);
+  pointer-events: none;
 }
 
 .panel-heading {

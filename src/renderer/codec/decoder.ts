@@ -377,6 +377,7 @@ export interface DecodeSessionCallbacks {
 
 export interface DecodeSession {
   stop: () => void
+  cancel: () => void
 }
 
 /** Real-time decode from an analyser fed by mic or graph output. */
@@ -407,10 +408,14 @@ export function startDecodeSession(
   }
   raf = requestAnimationFrame(tick)
 
+  const teardown = (): void => {
+    stopped = true
+    cancelAnimationFrame(raf)
+  }
+
   return {
     stop: () => {
-      stopped = true
-      cancelAnimationFrame(raf)
+      teardown()
       const samples = new Float32Array(recording)
       const result = decodeFromSamples(samples, sampleRate, config)
       if (result.text) {
@@ -418,6 +423,9 @@ export function startDecodeSession(
       }
       callbacks.onPhase?.(result.phase)
       callbacks.onComplete?.(result)
+    },
+    cancel: () => {
+      teardown()
     }
   }
 }

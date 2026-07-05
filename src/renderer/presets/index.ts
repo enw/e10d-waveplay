@@ -6,7 +6,8 @@ import type {
   FmParams,
   MixParams,
   SsbParams,
-  SuperhetParams
+  SuperhetParams,
+  ToneTextParams
 } from '@/audio/types'
 
 import am100pct from './am-100pct.json'
@@ -29,6 +30,7 @@ import ssbUsb from './ssb-usb.json'
 import superhetClassicAm from './superhet-classic-am.json'
 import superhetIfNarrow from './superhet-if-narrow.json'
 import superhetLoSweep from './superhet-lo-sweep.json'
+import tonetextHello from './tonetext-hello.json'
 
 type PresetBase = {
   id: string
@@ -43,6 +45,7 @@ export type Preset =
   | (PresetBase & { mode: 'fm'; params: FmParams })
   | (PresetBase & { mode: 'mix'; params: MixParams })
   | (PresetBase & { mode: 'cw'; params: CwParams })
+  | (PresetBase & { mode: 'tonetext'; params: ToneTextParams })
   | (PresetBase & { mode: 'ssb'; params: SsbParams })
   | (PresetBase & { mode: 'superhet'; params: SuperhetParams })
 
@@ -57,6 +60,7 @@ export const PRESETS: Preset[] = [
   beat5hz as Preset,
   ringMod as Preset,
   cwGate as Preset,
+  tonetextHello as Preset,
   ssbUsb as Preset,
   ssbLsb as Preset,
   ssbPilot as Preset,

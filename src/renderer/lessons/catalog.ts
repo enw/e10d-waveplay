@@ -1,5 +1,5 @@
 import type { SignalMode, SignalState, SuperhetStage } from '../audio/types'
-import { DEFAULT_AM, DEFAULT_FILTER, DEFAULT_SSB, DEFAULT_SUPERHET } from '../audio/types'
+import { DEFAULT_AM, DEFAULT_FILTER, DEFAULT_SSB, DEFAULT_SUPERHET, DEFAULT_TONETEXT } from '../audio/types'
 import type { Lesson, LessonStep } from './lessonEngine'
 
 export const LESSONS: Lesson[] = [
@@ -165,6 +165,43 @@ export const LESSONS: Lesson[] = [
         id: 'filter-help',
         instruction: 'Enable the bandpass filter and narrow it — QRM should fade.',
         validate: (s) => s.filter.enabled && s.filter.bandwidthHz <= 800
+      }
+    ]
+  },
+  {
+    id: 'tonetext-melody',
+    title: 'Your message as a melody',
+    description: 'Encode text as minor-chord tones and read it back from the waterfall.',
+    rfAnalogy:
+      'RTTY and PSK encode text as audio tones — ToneText uses an Am chord ladder so the transmission sounds musical while staying decodable.',
+    steps: [
+      {
+        id: 'tonetext-mode',
+        instruction: 'Switch to ToneText mode with the default message.',
+        applyState: {
+          mode: 'tonetext',
+          tonetext: { ...DEFAULT_TONETEXT }
+        },
+        validate: (s) => s.mode === 'tonetext' && s.tonetext.text.toLowerCase().includes('hello world')
+      },
+      {
+        id: 'transmit',
+        instruction: 'Press Transmit (or Play) and listen — each character is two chord tones.',
+        validate: (s) => s.mode === 'tonetext' && s.playing
+      },
+      {
+        id: 'waterfall',
+        instruction: 'Watch the Waterfall — vertical traces march at each tone frequency.',
+        hint: 'Scroll to the Waterfall viz while the transmission plays.',
+        validate: (s) => s.mode === 'tonetext'
+      },
+      {
+        id: 'verify-decode',
+        instruction: 'Click Verify decode in the ToneText panel — decoded text should match hello world!',
+        hint: 'Or use Listen & demo for speaker-to-mic decode.',
+        validate: (s, ctx) =>
+          s.mode === 'tonetext' &&
+          (ctx.tonetextDecoded?.toLowerCase().includes('hello world') ?? false)
       }
     ]
   }

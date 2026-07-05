@@ -71,6 +71,7 @@ export default function App() {
   const [micError, setMicError] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const [lessonSession, setLessonSession] = useState<LessonSession>(initialLessonSession)
+  const [tonetextDecoded, setTonetextDecoded] = useState('')
   const sweepRef = useRef(new SweepController())
   const stateRef = useRef(state)
 
@@ -155,7 +156,7 @@ export default function App() {
     if (!lesson) return
     const step = lesson.steps[lessonSession.stepIndex]
     if (!step) return
-    const ok = step.validate(state, { superhetStage })
+    const ok = step.validate(state, { superhetStage, tonetextDecoded })
     if (ok !== lessonSession.stepComplete) {
       setLessonSession((s) => ({ ...s, stepComplete: ok }))
     }
@@ -166,7 +167,8 @@ export default function App() {
     lessonSession.completed,
     lessonSession.stepComplete,
     state,
-    superhetStage
+    superhetStage,
+    tonetextDecoded
   ])
 
   const togglePlay = useCallback(async () => {
@@ -806,6 +808,7 @@ export default function App() {
               state={state}
               setState={setState}
               onMicError={setMicError}
+              onDecodedChange={setTonetextDecoded}
             />
 
             <SweepPanel
