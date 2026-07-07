@@ -7,5 +7,5 @@
     "rootHz": 220,
     "amplitude": 0.5
   },
-  "rfAnalogy": "Digital modes on HF encode characters as audio tones — here each byte splits into two minor-chord nibbles with a sync preamble you can see on the waterfall."
+  "rfAnalogy": "Like RTTY mark/space or PSK31 phase shifts — each byte splits into two A-minor chord nibbles. Sync preamble, melody payload, end marker: watch all three on the waterfall."
 }

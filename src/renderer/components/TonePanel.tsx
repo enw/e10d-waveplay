@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { SignalGraph } from '@/audio/SignalGraph'
 import type { SignalState } from '@/audio/types'
+import { TONETEXT_RF_ANALOGY } from '@/audio/types'
 import { encodeWav } from '@/export/wav'
 import { EXPORT_SAMPLE_RATE } from '@/export/types'
 import {
@@ -207,9 +208,7 @@ export default function TonePanel({ graph, state, setState, onMicError, onDecode
       )}
 
       <div className="panel-heading">ToneText codec</div>
-      <p className="tone-panel__hint">
-        Am minor-chord tones · two nibbles per character · sync + end framing
-      </p>
+      <p className="tone-panel__hint">{TONETEXT_RF_ANALOGY}</p>
 
       <label>
         Message

@@ -46,11 +46,18 @@ export function pickRandomPreset(excludeId?: string): Preset {
 }
 
 export function applyPresetToState(state: SignalState, preset: Preset): SignalState {
-  return {
+  let next: SignalState = {
     ...state,
     mode: preset.mode,
     [preset.mode]: mergePresetParams(preset.mode, preset.params)
   } as SignalState
+  if (preset.filter) {
+    next = { ...next, filter: { ...next.filter, ...preset.filter } }
+  }
+  if (preset.noise) {
+    next = { ...next, noise: { ...next.noise, ...preset.noise } }
+  }
+  return next
 }
 
 export function submitGuess(session: QuizSession, guess: SignalMode): QuizSession {

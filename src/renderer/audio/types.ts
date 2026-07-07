@@ -155,6 +155,10 @@ export const DEFAULT_TONETEXT: ToneTextParams = {
   amplitude: 0.5
 }
 
+/** RF / digital-modes analogy for ToneText hints, presets, and lessons. */
+export const TONETEXT_RF_ANALOGY =
+  'Like RTTY\'s mark/space tones or PSK31\'s phase shifts — but each nibble is a note on an A minor chord. Three low sync tones are the handshake; the melody between them is your data; two closing tones end the frame. CW keys one carrier on/off — ToneText keys many pitches in sequence.'
+
 export const DEFAULT_SSB: SsbParams = {
   carrierHz: 1000,
   modulatorHz: 100,
@@ -370,9 +374,7 @@ export function getVizHints(state: SignalState): VizHints {
     case 'tonetext': {
       const { rootHz } = state.tonetext
       return {
-        rfHint: appendNoise(
-          'ToneText — each character as two minor-chord tones (nibble FSK). Sync preamble, payload melody, end marker.'
-        ),
+        rfHint: appendNoise(TONETEXT_RF_ANALOGY),
         spectrumLabels: [
           { freq: rootHz, label: 'data' },
           { freq: rootHz * 0.5, label: 'sync' }

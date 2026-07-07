@@ -1,0 +1,20 @@
+{
+  "id": "tonetext-hello-noisy",
+  "name": "ToneText in the noise",
+  "mode": "tonetext",
+  "params": {
+    "text": "Hello world!",
+    "rootHz": 220,
+    "amplitude": 0.5
+  },
+  "noise": {
+    "awgnEnabled": true,
+    "snrDb": 15,
+    "qrmEnabled": false,
+    "qrmOffsetHz": 200,
+    "qrmLevel": 0.4,
+    "humEnabled": false,
+    "humLevel": 0.3
+  },
+  "rfAnalogy": "HF digital copy in band noise — like pulling RTTY or PSK31 out of the static. ToneText tones sit on an Am ladder; verify decode still finds hello world! at ~15 dB SNR."
+}

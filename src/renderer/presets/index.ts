@@ -5,6 +5,7 @@ import type {
   FilterParams,
   FmParams,
   MixParams,
+  NoiseParams,
   SsbParams,
   SuperhetParams,
   ToneTextParams
@@ -31,12 +32,14 @@ import superhetClassicAm from './superhet-classic-am.json'
 import superhetIfNarrow from './superhet-if-narrow.json'
 import superhetLoSweep from './superhet-lo-sweep.json'
 import tonetextHello from './tonetext-hello.json'
+import tonetextHelloNoisy from './tonetext-hello-noisy.json'
 
 type PresetBase = {
   id: string
   name: string
   rfAnalogy: string
   filter?: FilterParams
+  noise?: NoiseParams
 }
 
 export type Preset =
@@ -61,6 +64,7 @@ export const PRESETS: Preset[] = [
   ringMod as Preset,
   cwGate as Preset,
   tonetextHello as Preset,
+  tonetextHelloNoisy as Preset,
   ssbUsb as Preset,
   ssbLsb as Preset,
   ssbPilot as Preset,

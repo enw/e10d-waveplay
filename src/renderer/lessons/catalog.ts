@@ -1,5 +1,5 @@
 import type { SignalMode, SignalState, SuperhetStage } from '../audio/types'
-import { DEFAULT_AM, DEFAULT_FILTER, DEFAULT_SSB, DEFAULT_SUPERHET, DEFAULT_TONETEXT } from '../audio/types'
+import { DEFAULT_AM, DEFAULT_FILTER, DEFAULT_NOISE, DEFAULT_SSB, DEFAULT_SUPERHET, DEFAULT_TONETEXT, TONETEXT_RF_ANALOGY } from '../audio/types'
 import type { Lesson, LessonStep } from './lessonEngine'
 
 export const LESSONS: Lesson[] = [
@@ -172,8 +172,7 @@ export const LESSONS: Lesson[] = [
     id: 'tonetext-melody',
     title: 'Your message as a melody',
     description: 'Encode text as minor-chord tones and read it back from the waterfall.',
-    rfAnalogy:
-      'RTTY and PSK encode text as audio tones — ToneText uses an Am chord ladder so the transmission sounds musical while staying decodable.',
+    rfAnalogy: TONETEXT_RF_ANALOGY,
     steps: [
       {
         id: 'tonetext-mode',
@@ -201,6 +200,29 @@ export const LESSONS: Lesson[] = [
         hint: 'Or use Listen & demo for speaker-to-mic decode.',
         validate: (s, ctx) =>
           s.mode === 'tonetext' &&
+          (ctx.tonetextDecoded?.toLowerCase().includes('hello world') ?? false)
+      },
+      {
+        id: 'add-noise',
+        instruction:
+          'Load the "ToneText in the noise" preset — or enable band noise (AWGN) at 15 dB SNR or lower.',
+        hint: 'Preset picker → ToneText in the noise.',
+        applyState: {
+          mode: 'tonetext',
+          tonetext: { ...DEFAULT_TONETEXT },
+          noise: { ...DEFAULT_NOISE, awgnEnabled: true, snrDb: 15 }
+        },
+        validate: (s) =>
+          s.mode === 'tonetext' && s.noise.awgnEnabled && s.noise.snrDb <= 15
+      },
+      {
+        id: 'verify-noisy-decode',
+        instruction:
+          'Press Transmit, then Verify decode again — hello world! should survive the band noise.',
+        hint: 'If decode fails, try SNR 20 dB first, then re-test at 15 dB.',
+        validate: (s, ctx) =>
+          s.mode === 'tonetext' &&
+          s.noise.awgnEnabled &&
           (ctx.tonetextDecoded?.toLowerCase().includes('hello world') ?? false)
       }
     ]

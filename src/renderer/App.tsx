@@ -41,13 +41,17 @@ import {
 
 type AppMode = 'study' | 'quiz' | 'lessons'
 
-const MODES: { id: SignalMode; label: string }[] = [
+const MODES: { id: SignalMode; label: string; title?: string }[] = [
   { id: 'basic', label: 'Basic' },
   { id: 'am', label: 'AM' },
   { id: 'fm', label: 'FM' },
   { id: 'mix', label: 'Mix' },
   { id: 'cw', label: 'CW' },
-  { id: 'tonetext', label: 'ToneText' },
+  {
+    id: 'tonetext',
+    label: 'ToneText',
+    title: 'Digital text as audio tones (RTTY/PSK-style framing, musical nibbles)'
+  },
   { id: 'ssb', label: 'SSB' },
   { id: 'superhet', label: 'Superhet' }
 ]
@@ -217,25 +221,18 @@ export default function App() {
   const applyPreset = (preset: Preset) => {
     setPresetId(preset.id)
     setRfAnalogy(preset.rfAnalogy)
-    if (preset.filter) {
-      setState((s) => {
-        const next: SignalState = {
-          ...s,
-          mode: preset.mode,
-          [preset.mode]: mergePresetParams(preset.mode, preset.params),
-          filter: preset.filter ?? s.filter
-        } as SignalState
-        if (s.playing) void graph.updateParams(next)
-        return next
-      })
-      return
-    }
     setState((s) => {
-      const next: SignalState = {
+      let next: SignalState = {
         ...s,
         mode: preset.mode,
         [preset.mode]: mergePresetParams(preset.mode, preset.params)
       } as SignalState
+      if (preset.filter) {
+        next = { ...next, filter: { ...next.filter, ...preset.filter } }
+      }
+      if (preset.noise) {
+        next = { ...next, noise: { ...next.noise, ...preset.noise } }
+      }
       if (s.playing) void graph.updateParams(next)
       return next
     })
@@ -467,6 +464,7 @@ export default function App() {
                 key={m.id}
                 type="button"
                 className={state.mode === m.id ? 'tab active' : 'tab'}
+                title={m.title}
                 onClick={() => setMode(m.id)}
               >
                 {m.label}

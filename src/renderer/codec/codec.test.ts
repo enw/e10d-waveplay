@@ -1,10 +1,33 @@
 import { describe, expect, it } from 'vitest'
 import { buildFrame } from './frame'
-import { encodeTextToSamples } from './encoder'
+import { encodeTextToSamples, renderFrameToSamples } from './encoder'
 import { decodeFromSamples, decodeWavBuffer } from './decoder'
 import { encodeWav } from '../export/wav'
-import { DEFAULT_CODEC_CONFIG, DEFAULT_MESSAGE } from './types'
+import { DEFAULT_CODEC_CONFIG, DEFAULT_MESSAGE, type CodecConfig, type FramePlan } from './types'
 import { charToNibbles, nibbleToFreqHz } from './scale'
+
+/** Simulates clock drift: each payload tone starts progressively later (50 ms total). */
+function encodeWithCumulativeDrift(
+  text: string,
+  sampleRate: number,
+  config: CodecConfig,
+  totalDriftMs: number
+): Float32Array {
+  const plan = buildFrame(text, config)
+  const dataCount = plan.slots.filter((s) => s.kind === 'data').length
+  const driftPerSlotSec = totalDriftMs / 1000 / Math.max(1, dataCount)
+  let dataIdx = 0
+  const drifted: FramePlan = {
+    ...plan,
+    slots: plan.slots.map((slot) => {
+      if (slot.kind !== 'data') return slot
+      dataIdx++
+      return { ...slot, startSec: slot.startSec + dataIdx * driftPerSlotSec }
+    }),
+    totalDurationSec: plan.totalDurationSec + totalDriftMs / 1000
+  }
+  return renderFrameToSamples(drifted, sampleRate, config.amplitude)
+}
 
 describe('nibbleToFreqHz', () => {
   it('maps 16 nibbles with no collisions', () => {
@@ -61,5 +84,20 @@ describe('round-trip codec', () => {
     const result = decodeFromSamples(delayed, sampleRate, DEFAULT_CODEC_CONFIG)
     expect(result.text).toBe(text)
     expect(['done', 'locked']).toContain(result.phase)
+  })
+})
+
+/**
+ * Phase 2 gate: adaptive slot tracking should make this pass.
+ * Unskip when decoder measures and corrects per-slot clock drift.
+ */
+describe('adaptive drift (phase 2 gate)', () => {
+  it.skip('decodes hello world with 50ms cumulative payload drift', () => {
+    const text = 'hello world!'
+    const sampleRate = 44100
+    const samples = encodeWithCumulativeDrift(text, sampleRate, DEFAULT_CODEC_CONFIG, 50)
+    const result = decodeFromSamples(samples, sampleRate, DEFAULT_CODEC_CONFIG)
+    expect(result.text).toBe(text)
+    expect(result.phase).toBe('done')
   })
 })
